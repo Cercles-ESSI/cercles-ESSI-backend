@@ -53,7 +53,7 @@ public class TaigaController {
     }
 
     @PostMapping("/confirmar-proyecto")
-    public ResponseEntity<?> confirmarOrganizacion(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<?> confirmarProyecto(@RequestBody Map<String, Object> request) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
@@ -66,6 +66,28 @@ public class TaigaController {
             taigaService.asignarProyectp(equipoId, proyectoUrl);
 
             return ResponseEntity.ok(Map.of("mensaje", "Proyecto asignado correctamente."));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error interno del servidor: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/disconnect-proyecto")
+    public ResponseEntity<?> desconectarProyecto(@RequestBody Map<String, Object> request) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(403).body(Map.of("error", "Usuario no autenticado"));
+            }
+
+            Integer equipoId = (Integer) request.get("equipoId");
+
+            boolean desconectado = taigaService.desconectarProyecto(equipoId);
+
+            if (desconectado) {
+                return ResponseEntity.ok(Map.of("mensaje", "Proyecto desconectado correctamente."));
+            } else {
+                return ResponseEntity.status(404).body(Map.of("error", "Equipo no encontrado."));
+            }
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Error interno del servidor: " + e.getMessage()));
         }

@@ -11,11 +11,12 @@ import tfg.backend_tfg.model.Equipo;
 import tfg.backend_tfg.model.Usuario;
 import tfg.backend_tfg.repository.EquipoRepository;
 import tfg.backend_tfg.repository.UsuarioRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,6 +35,7 @@ public class TaigaService {
         this.restTemplate = new RestTemplate();
     }
 
+    private static final Logger logger = LoggerFactory.getLogger(TaigaService.class);
 
     //1. validar la org de un equipo
     public Map<String, Boolean> validarProyecto(Integer profesorId, List<Integer> miembrosIds, String profesorTaiga, String proyectoUrl) {
@@ -103,17 +105,19 @@ public class TaigaService {
         try {
             // Unimos la variable base con el endpoint específico del proyecto
             String url = String.format("%sprojects/by_slug?slug=%s", taigaApiBaseUrl, proyecto);
-
+            logger.info("URL:\n{}", url);
             ResponseEntity<JsonNode> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), JsonNode.class);
             JsonNode proyectoJson = response.getBody();
-
+            logger.info("JSON del proyecto recibido:\n{}", proyectoJson.toPrettyString());
             if (proyectoJson != null) {
                 // verifcar si proyecto es privado
                 boolean isPrivate = proyectoJson.path("is_private").asBoolean();
                 resultados.put("proyectoPublico", !isPrivate);
 
+                logger.info("dentro");
                 if(isPrivate){
                     System.out.println("¡Error! el proyecto es PRIVADO.");
+                    logger.info("dentroprivado");
                 }else{
                     //extraer lista de miembros
                     List<String> miembrosEnTaiga = proyectoJson.path("members").findValuesAsText("username");
@@ -150,6 +154,18 @@ public class TaigaService {
         proyecto = proyecto.split("/")[0];
         equipo.setTaigaProyecto(proyecto);
         equipoRepository.save(equipo);
+    }
+
+    //4. desconectar proyecto
+    public boolean desconectarProyecto(Integer equipoId) {
+        Optional<Equipo> equipoOpt = equipoRepository.findById(equipoId);
+        if (equipoOpt.isPresent()) {
+            Equipo equipo = equipoOpt.get();
+            equipo.setTaigaProyecto(null);
+            equipoRepository.save(equipo);
+            return true;
+        }
+        return false;
     }
 
 
