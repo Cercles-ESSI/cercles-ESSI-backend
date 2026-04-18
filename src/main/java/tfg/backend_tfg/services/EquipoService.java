@@ -143,7 +143,10 @@ public class EquipoService {
         int evaluadorId = equipo.getEvaluador().getId();
         String evaluadorNombre = equipo.getEvaluador().getNombre();
         String evaluadorCorreo = equipo.getEvaluador().getCorreo();
+        String taigaUserProf = equipo.getEvaluador().getTaigaUsername();
+
         String gitOrganizacion = equipo.getGitOrganizacion();
+        String taigaProyecto = equipo.getTaigaProyecto();
 
         // Obtener estudiantes del equipo usando el repositorio
         List<EstudianteDTO> estudiantes = estudianteEquipoRepository.findByEquipoId(id)
@@ -182,8 +185,10 @@ public class EquipoService {
                 evaluadorId,
                 evaluadorNombre,
                 evaluadorCorreo,
+                taigaUserProf,
                 estudiantes,
-                gitOrganizacion
+                gitOrganizacion,
+                taigaProyecto
         );
     }
 

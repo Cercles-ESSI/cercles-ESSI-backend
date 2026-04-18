@@ -19,6 +19,7 @@ public class EquipoDetalleDTO {
     private int evaluadorId;
     private String evaluadorNombre;
     private String evaluadorCorreo;
+    private String taigaUserProf;
 
     // Lista de estudiantes
     private List<EstudianteDTO> estudiantes;
@@ -26,11 +27,14 @@ public class EquipoDetalleDTO {
     //Información de github
     private String gitOrganizacion;
 
+    // Información de Taiga
+    private String taigaProyecto;
+
     // Constructor completo
     public EquipoDetalleDTO(int id, String nombre, int cursoId, String nombreAsignatura,
                                     int añoInicio, int cuatrimestre, boolean activo, String githubAsignatura, String tokenGithub,
-                                    int evaluadorId, String evaluadorNombre, String evaluadorCorreo,
-                                    List<EstudianteDTO> estudiantes, String gitOrganizacion) {
+                                    int evaluadorId, String evaluadorNombre, String evaluadorCorreo, String taigaUserProf,
+                                    List<EstudianteDTO> estudiantes, String gitOrganizacion, String taigaProyecto) {
         this.id = id;
         this.nombre = nombre;
         this.cursoId = cursoId;
@@ -43,8 +47,10 @@ public class EquipoDetalleDTO {
         this.evaluadorId = evaluadorId;
         this.evaluadorNombre = evaluadorNombre;
         this.evaluadorCorreo = evaluadorCorreo;
+        this.taigaUserProf = taigaUserProf;
         this.estudiantes = estudiantes;
         this.gitOrganizacion = gitOrganizacion;
+        this.taigaProyecto = taigaProyecto;
     }
 
     // Getters y Setters
@@ -144,6 +150,14 @@ public class EquipoDetalleDTO {
         this.evaluadorCorreo = evaluadorCorreo;
     }
 
+    public String getTaigaUserProf() {
+        return taigaUserProf;
+    }
+
+    public void setTaigaUserProf(String taigaUserProf) {
+        this.taigaUserProf = taigaUserProf;
+    }
+
     public List<EstudianteDTO> getEstudiantes() {
         return estudiantes;
     }
@@ -158,6 +172,14 @@ public class EquipoDetalleDTO {
 
     public void setGitOrganizacion(String gitOrganizacion) {
         this.gitOrganizacion = gitOrganizacion;
+    }
+
+    public String getTaigaProyecto() {
+        return taigaProyecto;
+    }
+
+    public void setTaigaProyecto(String taigaProyecto) {
+        this.taigaProyecto = taigaProyecto;
     }
 
 }

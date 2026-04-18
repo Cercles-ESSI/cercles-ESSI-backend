@@ -102,16 +102,19 @@ public class UsuarioService {
             }
 
             Usuario usuario;
+            String taigaUsername = correo.substring(0, correo.indexOf("@"));
             if (rol == Rol.Estudiante) {
                 usuario = Estudiante.builder()
                         .correo(correo)
                         .nombre(nombre)
+                        .taigaUsername(taigaUsername)
                         .rol(rol)
                         .build();
             } else if (rol == Rol.Profesor) {
                 usuario = Profesor.builder()
                         .correo(correo)
                         .nombre(nombre)
+                        .taigaUsername(taigaUsername)
                         .rol(rol)
                         .build();
             } else {

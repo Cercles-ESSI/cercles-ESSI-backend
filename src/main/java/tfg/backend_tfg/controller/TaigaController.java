@@ -5,10 +5,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
 import tfg.backend_tfg.model.Usuario;
 import tfg.backend_tfg.repository.UsuarioRepository;
 import tfg.backend_tfg.services.TaigaService;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -25,55 +27,48 @@ public class TaigaController {
         this.usuarioRepository = usuarioRepository;
     }
 
-    @PostMapping("/connect")
-    public ResponseEntity<?> connectTaiga(@RequestBody Map<String, String> requestBody) {
+    @PostMapping("/validar-proyecto")
+    public ResponseEntity<?> validarProyecto(@RequestBody Map<String, Object> request) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
                 return ResponseEntity.status(403).body(Map.of("error", "Usuario no autenticado"));
             }
 
-            String email = authentication.getName();
-            Optional<Usuario> usuarioOpt = usuarioRepository.findByCorreo(email);
-            if (usuarioOpt.isEmpty()) {
-                return ResponseEntity.status(404).body(Map.of("error", "Usuario no encontrado"));
-            }
+            String proyectoUrl = (String) request.get("proyectoUrl");
+            List<Integer> miembrosIds = (List<Integer>) request.get("miembrosIds");
+            Integer profesorId = Integer.valueOf(request.get("profesorId").toString());
+            String profesorTaiga = (String) request.get("profesorTaiga");
 
-            Usuario usuario = usuarioOpt.get();
-            String type = requestBody.get("type");
-            Map<String, Object> taigaData;
+            Map<String, Boolean> resultado = taigaService.validarProyecto(profesorId, miembrosIds, profesorTaiga, proyectoUrl);
 
-            if ("normal".equals(type)) {
-                String username = requestBody.get("username");
-                String password = requestBody.get("password");
-                if (username == null || password == null) {
-                    return ResponseEntity.status(400).body(Map.of("error", "Credenciales faltantes"));
-                }
-                taigaData = taigaService.authenticateTaigaUser(username, password);
-
-            } else if ("github".equals(type)) {
-                // Verifica si el usuario tiene el GitHub token
-                if (usuario.getGithubAccessToken() == null) {
-                    return ResponseEntity.status(400).body(Map.of("error", "Token de GitHub no disponible. Conéctate a GitHub primero."));
-                }
-                taigaData = taigaService.authenticateTaigaUserWithGitHub(usuario.getGithubAccessToken());
-            } else {
-                return ResponseEntity.status(400).body(Map.of("error", "Tipo de autenticación inválido"));
-            }
-
-            if (taigaData == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "Autenticación fallida en Taiga"));
-            }
-
-            // Actualiza los datos en la base de datos
-            usuario.setTaigaId((Integer) taigaData.get("id"));
-            usuario.setTaigaUsername((String) taigaData.get("username"));
-            usuarioRepository.save(usuario);
-
-            return ResponseEntity.ok(Map.of("message", "Cuenta de Taiga asociada correctamente"));
+            return ResponseEntity.ok(resultado);
+        } catch (HttpClientErrorException e) {
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "Error al comunicarse con la API de Taiga: " + e.getResponseBodyAsString()
+            ));
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(500).body(Map.of("error", "Error interno del servidor"));
+            return ResponseEntity.status(500).body(Map.of("error", "Error interno del servidor: " + e.getMessage()));
         }
     }
+
+    @PostMapping("/confirmar-proyecto")
+    public ResponseEntity<?> confirmarOrganizacion(@RequestBody Map<String, Object> request) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(403).body(Map.of("error", "Usuario no autenticado"));
+            }
+
+            Integer equipoId = (Integer) request.get("equipoId");
+            String proyectoUrl = (String) request.get("proyectoUrl");
+
+            taigaService.asignarProyectp(equipoId, proyectoUrl);
+
+            return ResponseEntity.ok(Map.of("mensaje", "Proyecto asignado correctamente."));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Error interno del servidor: " + e.getMessage()));
+        }
+    }
+
 }
