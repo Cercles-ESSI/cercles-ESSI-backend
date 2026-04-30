@@ -105,19 +105,15 @@ public class TaigaService {
         try {
             // Unimos la variable base con el endpoint específico del proyecto
             String url = String.format("%sprojects/by_slug?slug=%s", taigaApiBaseUrl, proyecto);
-            logger.info("URL:\n{}", url);
             ResponseEntity<JsonNode> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), JsonNode.class);
             JsonNode proyectoJson = response.getBody();
-            logger.info("JSON del proyecto recibido:\n{}", proyectoJson.toPrettyString());
             if (proyectoJson != null) {
                 // verifcar si proyecto es privado
                 boolean isPrivate = proyectoJson.path("is_private").asBoolean();
                 resultados.put("proyectoPublico", !isPrivate);
 
-                logger.info("dentro");
                 if(isPrivate){
                     System.out.println("¡Error! el proyecto es PRIVADO.");
-                    logger.info("dentroprivado");
                 }else{
                     //extraer lista de miembros
                     List<String> miembrosEnTaiga = proyectoJson.path("members").findValuesAsText("username");
