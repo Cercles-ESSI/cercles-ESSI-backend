@@ -182,6 +182,7 @@ public class EquipoService {
                 curso.isActivo(),
                 curso.getGithubAsignatura(),
                 tokenDescifrado,
+                curso.getGestionTareas(),
                 evaluadorId,
                 evaluadorNombre,
                 evaluadorCorreo,

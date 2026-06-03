@@ -35,6 +35,9 @@ public class Curso {
     @Column(name = "token_github_asignatura", nullable = false)
     private String tokenGithubAsignatura;
 
+    @Column(name = "gestion_tareas", nullable = false)
+    private String gestionTareas;
+
     // Relación con profesores a través de ProfesorCurso
     @OneToMany(mappedBy = "curso", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProfesorCurso> profesores;
@@ -42,4 +45,10 @@ public class Curso {
     // Relación muchos a muchos con estudiantes a través de EstudianteCurso
     @OneToMany(mappedBy = "curso", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<EstudianteCurso> estudiantes;
+
+    @OneToMany(mappedBy = "curso", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Equipo> equipos;
+
+    @OneToMany(mappedBy = "curso", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Evaluacion> evaluaciones;
 }

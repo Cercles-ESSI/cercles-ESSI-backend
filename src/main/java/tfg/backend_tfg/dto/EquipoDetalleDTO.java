@@ -14,12 +14,14 @@ public class EquipoDetalleDTO {
     private boolean activo;
     private String githubAsignatura;
     private String tokenGithub;
+    private String gestionTareas;
 
     // Información del evaluador
     private int evaluadorId;
     private String evaluadorNombre;
     private String evaluadorCorreo;
     private String taigaUserProf;
+
 
     // Lista de estudiantes
     private List<EstudianteDTO> estudiantes;
@@ -30,9 +32,11 @@ public class EquipoDetalleDTO {
     // Información de Taiga
     private String taigaProyecto;
 
+
+
     // Constructor completo
     public EquipoDetalleDTO(int id, String nombre, int cursoId, String nombreAsignatura,
-                                    int añoInicio, int cuatrimestre, boolean activo, String githubAsignatura, String tokenGithub,
+                                    int añoInicio, int cuatrimestre, boolean activo, String githubAsignatura, String tokenGithub,String gestionTareas,
                                     int evaluadorId, String evaluadorNombre, String evaluadorCorreo, String taigaUserProf,
                                     List<EstudianteDTO> estudiantes, String gitOrganizacion, String taigaProyecto) {
         this.id = id;
@@ -44,6 +48,7 @@ public class EquipoDetalleDTO {
         this.activo = activo;
         this.githubAsignatura = githubAsignatura;
         this.tokenGithub = tokenGithub;
+        this.gestionTareas = gestionTareas;
         this.evaluadorId = evaluadorId;
         this.evaluadorNombre = evaluadorNombre;
         this.evaluadorCorreo = evaluadorCorreo;
@@ -124,6 +129,14 @@ public class EquipoDetalleDTO {
 
     public void setTokenGithub(String tokenGithub) {
         this.tokenGithub = tokenGithub;
+    }
+
+    public String getGestionTareas() {
+        return gestionTareas;
+    }
+
+    public void setGestionTareas(String gestionTareas) {
+        this.gestionTareas = gestionTareas;
     }
 
     public int getEvaluadorId() {

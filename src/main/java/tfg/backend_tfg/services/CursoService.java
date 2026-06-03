@@ -25,18 +25,7 @@ import tfg.backend_tfg.dto.CursoDetalleDTO;
 import tfg.backend_tfg.dto.CursoSummaryDTO;
 import tfg.backend_tfg.dto.EquipoDTO;
 import tfg.backend_tfg.dto.EstudianteDTO;
-import tfg.backend_tfg.model.Curso;
-import tfg.backend_tfg.model.CursoRequest;
-import tfg.backend_tfg.model.Estudiante;
-import tfg.backend_tfg.model.EstudianteCurso;
-import tfg.backend_tfg.model.EstudianteRequest;
-import tfg.backend_tfg.model.Evaluacion;
-import tfg.backend_tfg.model.EvaluacionRequest;
-import tfg.backend_tfg.model.Profesor;
-import tfg.backend_tfg.model.ProfesorCurso;
-import tfg.backend_tfg.model.ProfesorRequest;
-import tfg.backend_tfg.model.Rol;
-import tfg.backend_tfg.model.Usuario;
+import tfg.backend_tfg.model.*;
 import tfg.backend_tfg.repository.CursoRepository;
 import tfg.backend_tfg.repository.EquipoRepository;
 import tfg.backend_tfg.repository.EstudianteCursoRepository;
@@ -205,6 +194,7 @@ public class CursoService {
                     .activo(cursoRequest.isActivo())
                     .githubAsignatura(cursoRequest.getGithubAsignatura())
                     .tokenGithubAsignatura(encryptedToken)
+                    .gestionTareas(cursoRequest.getGestionTareas())
                     .build();
 
             curso = cursoRepository.save(curso);
@@ -350,7 +340,8 @@ public class CursoService {
                             curso.isActivo(),
                             numeroEstudiantes,
                             numeroEquipos,
-                            numeroEstudiantesSinEquipo
+                            numeroEstudiantesSinEquipo,
+                            curso.getGestionTareas()
                     );
                 })
                 .toList();
@@ -429,7 +420,8 @@ public class CursoService {
                 estudiantesSinGrupo.stream().map(EstudianteDTO::getCorreo).toList(),
                 estudiantesSinGrupo.stream().map(EstudianteDTO::getGrupo).toList(),
                 nombresProfesores,
-                equiposConMiembros
+                equiposConMiembros,
+                curso.getGestionTareas()
         );
     }
 
@@ -454,6 +446,7 @@ public class CursoService {
         cursoExistente.setAñoInicio(cursoRequest.getAñoInicio());
         cursoExistente.setCuatrimestre(cursoRequest.getCuatrimestre());
         cursoExistente.setGithubAsignatura(cursoRequest.getGithubAsignatura());
+        cursoExistente.setGestionTareas(cursoRequest.getGestionTareas());
 
         String encryptedToken = null;
             if (cursoRequest.getTokenGithubAsignatura() != null && !cursoRequest.getTokenGithubAsignatura().isEmpty()) {

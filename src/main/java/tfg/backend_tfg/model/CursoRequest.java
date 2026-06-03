@@ -10,6 +10,7 @@ public class CursoRequest {
     private boolean activo;
     private String githubAsignatura;
     private String tokenGithubAsignatura;
+    private String gestionTareas;
     private List<EstudianteRequest> estudiantes;
     private List<ProfesorRequest> profesores;
 
@@ -32,6 +33,14 @@ public class CursoRequest {
 
     public void setNombreAsignatura(String nombreAsignatura) {
         this.nombreAsignatura = nombreAsignatura;
+    }
+
+    public String getGestionTareas() {
+        return gestionTareas;
+    }
+
+    public void setGestionTareas(String gestionTareas) {
+        this.gestionTareas = gestionTareas;
     }
 
     public int getAñoInicio() {

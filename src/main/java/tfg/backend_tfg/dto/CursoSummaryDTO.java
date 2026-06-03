@@ -9,17 +9,19 @@ public class CursoSummaryDTO {
     private int añoInicio;
     private int cuatrimestre;
     private boolean activo;
+    private String gestionado;
     private int numeroEstudiantes;
     private int numeroEquipos;
     private int numeroEstudiantesSinEquipo;
 
     public CursoSummaryDTO(int id, String nombreAsignatura, int añoInicio, int cuatrimestre, boolean activo, int numeroEstudiantes, int numeroEquipos,
-    int numeroEstudiantesSinEquipo) {
+    int numeroEstudiantesSinEquipo, String gestionado) {
         this.id = id;
         this.nombreAsignatura = nombreAsignatura;
         this.añoInicio = añoInicio;
         this.cuatrimestre = cuatrimestre;
         this.activo = activo;
+        this.gestionado = gestionado;
         this.numeroEstudiantes = numeroEstudiantes;
         this.numeroEquipos = numeroEquipos;
         this.numeroEstudiantesSinEquipo = numeroEstudiantesSinEquipo;

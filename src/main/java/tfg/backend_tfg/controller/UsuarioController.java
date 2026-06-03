@@ -181,7 +181,8 @@ public class UsuarioController {
                     ec.getCurso().isActivo(),
                     0,
                     0,
-                    0
+                    0,
+                    ec.getCurso().getGestionTareas()
             ))
                     .toList();
 
