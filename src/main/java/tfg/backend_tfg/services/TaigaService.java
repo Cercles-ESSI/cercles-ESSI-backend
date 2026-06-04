@@ -7,10 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.beans.factory.annotation.Value;
-import tfg.backend_tfg.dto.HistoriasEquipoDTO;
-import tfg.backend_tfg.dto.HistoriasEstudianteDTO;
-import tfg.backend_tfg.dto.TareasEquipoDTO;
-import tfg.backend_tfg.dto.TareasEstudianteDTO;
+import tfg.backend_tfg.dto.*;
 import tfg.backend_tfg.model.*;
 import tfg.backend_tfg.repository.EquipoRepository;
 import tfg.backend_tfg.repository.TareasEquipoRepository;
@@ -262,11 +259,16 @@ public class TaigaService {
                     List<HistoriasUsuarioEquipo> historiasAGuardar = new ArrayList<>();
 
                     for (JsonNode storyNode : historyArray) {
+                        JsonNode milestoneNode = storyNode.path("milestone_name");
+                        String nombreSprint = (milestoneNode.isMissingNode() || milestoneNode.isNull())
+                                ? null
+                                : milestoneNode.asText();
 
                         HistoriasUsuarioEquipo historia = HistoriasUsuarioEquipo.builder()
                                 .id(storyNode.path("id").asInt())
                                 .titulo(storyNode.path("subject").asText())
                                 .estado(storyNode.path("status_extra_info").path("name").asText("New"))
+                                .sprint(nombreSprint)
                                 .puntosEsfuerzo(storyNode.path("total_points").asInt(0))
                                 .equipo(equipo)
                                 .build();
@@ -477,6 +479,67 @@ public class TaigaService {
         return resultadoFinal;
     }
 
+    public List<HistoriaDetalleDTO> obtenerDetallestaiga(Integer equipoId) {
+
+        // 1. Buscamos el equipo en la base de datos
+        Equipo equipo = equipoRepository.findById(equipoId)
+                .orElseThrow(() -> new RuntimeException("Equipo no encontrado con ID: " + equipoId));
+
+        // 2. Traemos todas las historias y tareas que pertenecen a este equipo
+        List<HistoriasUsuarioEquipo> historiasDelEquipo = historiasRepository.findByEquipo_Id(equipoId);
+        List<TareasEquipo> tareasDelEquipo = tareasRepository.findByEquipoId(equipoId);
+
+        // 3. A partir de aquí, la lógica matemática es exactamente la misma que hicimos antes:
+        List<HistoriaDetalleDTO> matrizDetalles = new ArrayList<>();
+        List<Estudiante> estudiantesDelEquipo = equipo.getEstudiantes();
+
+        for (HistoriasUsuarioEquipo historia : historiasDelEquipo) {
+            HistoriaDetalleDTO dto = new HistoriaDetalleDTO();
+            dto.setId(historia.getId());
+            dto.setTitulo(historia.getTitulo());
+            dto.setEstado(historia.getEstado());
+            dto.setSprint(historia.getSprint());
+            dto.setPuntosEsfuerzo(historia.getPuntosEsfuerzo());
+
+            // Filtrar tareas de esta historia
+            List<TareasEquipo> tareasDeEstaHistoria = tareasDelEquipo.stream()
+                    .filter(tarea -> tarea.getHistoriaUsuario() != null && tarea.getHistoriaUsuario().getId().equals(historia.getId()))
+                    .collect(Collectors.toList());
+
+            dto.setTotalTareas(tareasDeEstaHistoria.size());
+
+            long sinAsignar = tareasDeEstaHistoria.stream()
+                    .filter(tarea -> tarea.getEstudiante() == null)
+                    .count();
+            dto.setTareasSinAsignar((int) sinAsignar);
+
+            long miembrosUnicos = tareasDeEstaHistoria.stream()
+                    .filter(tarea -> tarea.getEstudiante() != null)
+                    .map(tarea -> tarea.getEstudiante().getId())
+                    .distinct()
+                    .count();
+            dto.setTotalMiembros((int) miembrosUnicos);
+
+            Map<String, Integer> recuentoPorEstudiante = new HashMap<>();
+            for (Estudiante estudiante : estudiantesDelEquipo) {
+                recuentoPorEstudiante.put(estudiante.getNombre(), 0);
+            }
+
+            for (TareasEquipo tarea : tareasDeEstaHistoria) {
+                if (tarea.getEstudiante() != null) {
+                    String nombreEstudiante = tarea.getEstudiante().getNombre();
+                    int tareasActuales = recuentoPorEstudiante.getOrDefault(nombreEstudiante, 0);
+                    recuentoPorEstudiante.put(nombreEstudiante, tareasActuales + 1);
+                }
+            }
+
+            dto.setTareasPorEstudiante(recuentoPorEstudiante);
+            matrizDetalles.add(dto);
+        }
+
+        return matrizDetalles;
+    }
+
     private void guardarFechaUltimaSincronizacionTareas(Equipo equipo, LocalDateTime fecha) {
         // 1. Actualizamos el campo en el objeto equipo
         equipo.setUltimaSincronizacionTareas(fecha);
@@ -621,12 +684,17 @@ public class TaigaService {
                 if (historyArray.isArray()) {
                     List<HistoriasUsuarioEquipo> historiasAGuardar = new ArrayList<>();
 
-                    for (JsonNode storyNode : historyArray) {
 
+                    for (JsonNode storyNode : historyArray) {
+                        JsonNode milestoneNode = storyNode.path("milestone_name");
+                        String nombreSprint = (milestoneNode.isMissingNode() || milestoneNode.isNull())
+                                ? null
+                                : milestoneNode.asText();
                         HistoriasUsuarioEquipo historia = HistoriasUsuarioEquipo.builder()
                                 .id(storyNode.path("id").asInt())
                                 .titulo(storyNode.path("subject").asText())
                                 .estado(storyNode.path("status_extra_info").path("name").asText("New"))
+                                .sprint(nombreSprint)
                                 .puntosEsfuerzo(storyNode.path("total_points").asInt(0))
                                 .equipo(equipo)
                                 .build();
