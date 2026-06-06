@@ -264,6 +264,19 @@ public class TaigaService {
                                 ? null
                                 : milestoneNode.asText();
 
+                        JsonNode assignedNode = storyNode.path("assigned_to");
+                        Estudiante estudianteResponsable = null;
+
+                        if (!assignedNode.isMissingNode() && !assignedNode.isNull()) {
+                            Integer taigaUserId = assignedNode.asInt();
+
+
+                            estudianteResponsable = equipo.getEstudiantes().stream()
+                                    .filter(e -> e.getTaigaId() != null && e.getTaigaId().equals(taigaUserId))
+                                    .findFirst()
+                                    .orElse(null);
+                        }
+
                         HistoriasUsuarioEquipo historia = HistoriasUsuarioEquipo.builder()
                                 .id(storyNode.path("id").asInt())
                                 .titulo(storyNode.path("subject").asText())
@@ -271,6 +284,7 @@ public class TaigaService {
                                 .sprint(nombreSprint)
                                 .puntosEsfuerzo(storyNode.path("total_points").asInt(0))
                                 .equipo(equipo)
+                                .responsable(estudianteResponsable)
                                 .build();
 
                         historiasAGuardar.add(historia);
@@ -314,8 +328,10 @@ public class TaigaService {
                             Integer taigaIdAsignado = assignedToNode.asInt();
 
                             // Buscamos en nuestra BD al alumno que tiene ese ID de Taiga
-                            estudianteAsignado = (Estudiante) usuarioRepository.findByTaigaId(taigaIdAsignado)
-                                    .orElse(null); // Si no lo encuentra, lo dejamos a null
+                            estudianteAsignado = equipo.getEstudiantes().stream()
+                                    .filter(e -> e.getTaigaId() != null && e.getTaigaId().equals(taigaIdAsignado))
+                                    .findFirst()
+                                    .orElse(null);
                         }
                         String fechaCreacionStr = taskNode.path("created_date").asText();
                         LocalDateTime fechaRealCreacion = java.time.OffsetDateTime.parse(fechaCreacionStr).toLocalDateTime();
@@ -402,16 +418,27 @@ public class TaigaService {
             long historiasCerradas = tareasDelEquipo.stream()
                     .filter(tarea -> tarea.getEstudiante() != null && tarea.getEstudiante().getId() == estudiante.getId())
                     .filter(tarea -> tarea.getHistoriaUsuario() != null)
-                    .filter(tarea -> "Closed".equalsIgnoreCase(tarea.getHistoriaUsuario().getEstado())) // El filtro extra
+                    .filter(tarea -> "Done".equalsIgnoreCase(tarea.getHistoriaUsuario().getEstado()))
                     .map(tarea -> tarea.getHistoriaUsuario().getId())
                     .distinct()
                     .count();
 
+            long historiasAbiertas = historiasParticipadas - historiasCerradas;
             // Calcular el porcentaje de participación
             double porcentaje = 0.0;
             if (totalHistoriasEquipo > 0) {
                 porcentaje = (historiasParticipadas * 100.0) / totalHistoriasEquipo;
             }
+
+            int puntosDelEstudiante = tareasDelEquipo.stream()
+                    .filter(tarea -> tarea.getEstudiante() != null && tarea.getEstudiante().getId() == estudiante.getId())
+                    .filter(tarea -> tarea.getHistoriaUsuario() != null)
+                    // Obtenemos el objeto Historia entero en vez de solo el ID
+                    .map(TareasEquipo::getHistoriaUsuario)
+                    .distinct() // Evitamos sumar la misma historia dos veces si el alumno tiene 2 tareas en ella
+                    // Sumamos los puntos (protegiendo por si alguna historia tiene null en puntos)
+                    .mapToInt(historia -> historia.getPuntosEsfuerzo() != null ? historia.getPuntosEsfuerzo() : 0)
+                    .sum();
 
             // Construimos el DTO del estudiante
             HistoriasEstudianteDTO dto = new HistoriasEstudianteDTO();
@@ -419,7 +446,9 @@ public class TaigaService {
             dto.setNombreEstudiante(estudiante.getNombre());
             dto.setTotalHistoriasParticipadas((int) historiasParticipadas);
             dto.setPorcentajeHistorias(porcentaje);
-            dto.setTotalHistoriasCerradas((int) historiasCerradas);
+            dto.setHistoriasCerradas((int) historiasCerradas );
+            dto.setHistoriasAbiertas((int) historiasAbiertas);
+            dto.setPuntosEsfuerzo(puntosDelEstudiante);
             metricasEstudiantes.add(dto);
         }
 
@@ -449,11 +478,17 @@ public class TaigaService {
         // 4. Recorrer a TODOS los estudiantes del equipo (tengan tareas o no)
         for (Estudiante estudiante : todosLosEstudiantes) {
 
-            // Filtramos la lista de tareas total para contar solo las que tienen asignado a este estudiante
-            long tareasDelAlumno = tareasDelEquipo.stream()
+            List<TareasEquipo> listaTareasAlumno = tareasDelEquipo.stream()
                     .filter(tarea -> tarea.getEstudiante() != null &&
-                            tarea.getEstudiante().getId() == estudiante.getId()) // <-- El cambio está aquí
+                            tarea.getEstudiante().getId() == estudiante.getId())
+                    .toList();
+
+            long tareasDelAlumno = listaTareasAlumno.size();
+            long cerradas = listaTareasAlumno.stream()
+                    .filter(t -> "Closed".equalsIgnoreCase(t.getEstado()))
                     .count();
+
+            long abiertas = tareasDelAlumno - cerradas;
 
             // Calculamos el porcentaje con cuidado de no dividir por cero si el equipo aún no tiene tareas
             double porcentaje = 0.0;
@@ -467,6 +502,10 @@ public class TaigaService {
             dto.setNombreEstudiante(estudiante.getNombre());
             dto.setTotalTareas((int) tareasDelAlumno);
             dto.setPorcentajeTareas(porcentaje);
+
+
+            dto.setTareasAbiertas((int) abiertas);
+            dto.setTareasCerradas((int) cerradas);
 
             metricasEstudiantes.add(dto);
         }
@@ -576,7 +615,6 @@ public class TaigaService {
 
         // 5. Si hay una fecha de última sincronización, la añadimos como filtro a la URL
         if (ultimaSincronizacion != null) {
-            // Taiga espera formato ISO 8601 UTC (ej. 2026-02-12T10:30:00Z)
             String fechaFormateada = ultimaSincronizacion.atOffset(ZoneOffset.UTC)
                     .format(DateTimeFormatter.ISO_INSTANT);
             url += "&modified_date__gte=" + fechaFormateada;
@@ -615,8 +653,10 @@ public class TaigaService {
                         JsonNode assignedToNode = taskNode.path("assigned_to");
                         if (!assignedToNode.isMissingNode() && !assignedToNode.isNull()) {
                             Integer taigaIdAsignado = assignedToNode.asInt();
-                            estudianteAsignado = (Estudiante) usuarioRepository.findByTaigaId(taigaIdAsignado)
-                                    .orElse(null); // Si no lo encuentra, lo dejamos a null
+                            estudianteAsignado = equipo.getEstudiantes().stream()
+                                    .filter(e -> e.getTaigaId() != null && e.getTaigaId().equals(taigaIdAsignado))
+                                    .findFirst()
+                                    .orElse(null);
                         }
 
                         HistoriasUsuarioEquipo historiaVinculada = null;
@@ -690,6 +730,18 @@ public class TaigaService {
                         String nombreSprint = (milestoneNode.isMissingNode() || milestoneNode.isNull())
                                 ? null
                                 : milestoneNode.asText();
+
+                        JsonNode assignedNode = storyNode.path("assigned_to");
+                        Estudiante estudianteResponsable = null;
+
+                        if (!assignedNode.isMissingNode() && !assignedNode.isNull()) {
+                            Integer taigaUserId = assignedNode.asInt();
+
+                            estudianteResponsable = equipo.getEstudiantes().stream()
+                                    .filter(e -> e.getTaigaId() != null && e.getTaigaId().equals(taigaUserId))
+                                    .findFirst()
+                                    .orElse(null);
+                        }
                         HistoriasUsuarioEquipo historia = HistoriasUsuarioEquipo.builder()
                                 .id(storyNode.path("id").asInt())
                                 .titulo(storyNode.path("subject").asText())
@@ -697,6 +749,7 @@ public class TaigaService {
                                 .sprint(nombreSprint)
                                 .puntosEsfuerzo(storyNode.path("total_points").asInt(0))
                                 .equipo(equipo)
+                                .responsable(estudianteResponsable)
                                 .build();
 
                         historiasAGuardar.add(historia);

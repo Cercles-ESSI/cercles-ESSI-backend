@@ -12,6 +12,8 @@ public class HistoriasEstudianteDTO {
     private String nombreEstudiante;
     private int totalHistoriasParticipadas;
     private double porcentajeHistorias;
-    private int totalHistoriasCerradas;
+    private int historiasAbiertas;
+    private int historiasCerradas;
+    private int puntosEsfuerzo;
 
 }

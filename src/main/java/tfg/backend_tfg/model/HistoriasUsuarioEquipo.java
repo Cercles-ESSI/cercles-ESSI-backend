@@ -34,4 +34,8 @@ public class HistoriasUsuarioEquipo {
     @JoinColumn(name = "equipo_id", nullable = false)
     private Equipo equipo;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "estudiante_id")
+    private Estudiante responsable;
+
 }
