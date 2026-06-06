@@ -11,4 +11,5 @@ import tfg.backend_tfg.model.Estudiante;
 public interface EstudianteRepository extends JpaRepository<Estudiante, Integer> {
 
     Optional<Estudiante> findByCorreo(String correo);
+    Optional<Estudiante> findByTaigaId(Integer taigaId);
 }

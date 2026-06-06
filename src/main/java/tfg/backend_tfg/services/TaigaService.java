@@ -613,7 +613,7 @@ public class TaigaService {
         // 4. Construir la URL base
         String url = String.format("%stasks?project=%s", taigaApiBaseUrl, taigaProjectId);
 
-        // 5. Si hay una fecha de última sincronización, la añadimos como filtro a la URL
+        // 5. Si hay una fecha...
         if (ultimaSincronizacion != null) {
             String fechaFormateada = ultimaSincronizacion.atOffset(ZoneOffset.UTC)
                     .format(DateTimeFormatter.ISO_INSTANT);

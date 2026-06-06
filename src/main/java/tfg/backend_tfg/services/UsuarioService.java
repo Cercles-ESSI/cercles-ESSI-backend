@@ -37,13 +37,18 @@ public class UsuarioService {
     private final EstudianteEquipoRepository estudianteEquipoRepository;
 
     @Autowired
-    public UsuarioService(UsuarioRepository usuarioRepository, EstudianteRepository estudianteRepository, ProfesorCursoRepository profesorCursoRepository, EstudianteCursoRepository estudianteCursoRepository, EstudianteEquipoRepository estudianteEquipoRepository) {
+    private final TaigaService taigaService;
+    @Autowired
+    public UsuarioService(UsuarioRepository usuarioRepository, EstudianteRepository estudianteRepository, ProfesorCursoRepository profesorCursoRepository, EstudianteCursoRepository estudianteCursoRepository, EstudianteEquipoRepository estudianteEquipoRepository, TaigaService taigaService) {
         this.usuarioRepository = usuarioRepository;
         this.estudianteRepository = estudianteRepository;
         this.profesorCursoRepository = profesorCursoRepository;
         this.estudianteCursoRepository = estudianteCursoRepository;
         this.estudianteEquipoRepository = estudianteEquipoRepository;
+        this.taigaService = taigaService;
+
     }
+
 
 
     public List<Usuario> getAllUsuarios() {
@@ -103,11 +108,14 @@ public class UsuarioService {
 
             Usuario usuario;
             String taigaUsername = correo.substring(0, correo.indexOf("@"));
+
+            Integer taigaId = taigaService.obtenerIdUser(taigaUsername);
             if (rol == Rol.Estudiante) {
                 usuario = Estudiante.builder()
                         .correo(correo)
                         .nombre(nombre)
                         .taigaUsername(taigaUsername)
+                        .taigaId(taigaId)
                         .rol(rol)
                         .build();
             } else if (rol == Rol.Profesor) {
@@ -115,6 +123,7 @@ public class UsuarioService {
                         .correo(correo)
                         .nombre(nombre)
                         .taigaUsername(taigaUsername)
+                        .taigaId(taigaId)
                         .rol(rol)
                         .build();
             } else {

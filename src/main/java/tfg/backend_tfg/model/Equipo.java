@@ -5,6 +5,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 
 @Entity
 @Data
@@ -35,9 +38,21 @@ public class Equipo {
     private String taigaProyecto;
 
     @Column(name = "taiga_project_id")
-    private String taigaProyectoId;
+    private Integer taigaProyectoId;
 
-    @Column(name = "taiga_refresh_token")
-    private String taigaRefreshToken;
+    @OneToMany
+    @JoinTable(
+            name = "estudiante_equipo",
+            joinColumns = @JoinColumn(name = "id_equipo"),
+            inverseJoinColumns = @JoinColumn(name = "id_estudiante") // La columna que apunta a la id de Estudiante
+    )
+    private List<Estudiante> estudiantes;
+
+
+    @Column(name = "ultima_sync_historias")
+    private LocalDateTime ultimaSincronizacionHistorias;
+
+    @Column(name = "ultima_sync_tareas")
+    private LocalDateTime ultimaSincronizacionTareas;
 
 }
