@@ -3,13 +3,7 @@ package tfg.backend_tfg.services;
 import org.springframework.stereotype.Service;
 
 import jakarta.transaction.Transactional;
-import tfg.backend_tfg.dto.CrearEvaluacionDTO;
-import tfg.backend_tfg.dto.EvaluacionDTO;
-import tfg.backend_tfg.dto.EvaluacionDetalleDTO;
-import tfg.backend_tfg.dto.EvaluacionMediaDTO;
-import tfg.backend_tfg.dto.EvaluacionPorEvaluacionIdDTO;
-import tfg.backend_tfg.dto.EvaluacionResumenDTO;
-import tfg.backend_tfg.dto.MediaPorEvaluacionDTO;
+import tfg.backend_tfg.dto.*;
 import tfg.backend_tfg.model.Curso;
 import tfg.backend_tfg.model.Equipo;
 import tfg.backend_tfg.model.Estudiante;
@@ -142,6 +136,21 @@ public class EvaluacionService {
         }
     
         return resultado;
+    }
+
+    public List<MiAutoEvaluacionDTO> obtenerMisAutoEvaluaciones(Integer equipoId, Integer estudianteId) {
+
+        List<EvaluacionDetalle> misDetalles = detalleRepository.findByEquipoIdAndEvaluadoIdAndEvaluadorId(
+                equipoId, estudianteId, estudianteId
+        );
+
+        // Mapeamos el resultado al nuevo DTO simple
+        return misDetalles.stream()
+                .map(detalle -> new MiAutoEvaluacionDTO(
+                        detalle.getEvaluacion().getId(),
+                        detalle.getPuntos()
+                ))
+                .collect(Collectors.toList());
     }
     
 

@@ -8,10 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import tfg.backend_tfg.dto.CrearEvaluacionDTO;
-import tfg.backend_tfg.dto.EvaluacionDetalleRequestDTO;
-import tfg.backend_tfg.dto.EvaluacionMediaDTO;
-import tfg.backend_tfg.dto.EvaluacionResumenDTO;
+import tfg.backend_tfg.dto.*;
 import tfg.backend_tfg.model.Evaluacion;
 import tfg.backend_tfg.services.EvaluacionService;
 
@@ -63,12 +60,29 @@ public class EvaluacionController {
         return ResponseEntity.ok(medias);
     }
 
+
+
     @GetMapping("/equipo/{equipoId}/evaluacion-activa") //Cambiar swagger
     public ResponseEntity<Map<String, Object>> getEvaluacionActiva(@PathVariable Integer equipoId) {
         Map<String, Object> response = evaluacionService.getEvaluacionActiva(equipoId);
         return ResponseEntity.ok(response);
     }
 
+    @PreAuthorize("hasAuthority('ESTUDIANTE')")
+    @GetMapping("/equipo/{equipoId}/autoevaluacion/{estudianteId}")
+    public ResponseEntity<List<MiAutoEvaluacionDTO>> obtenerMiAutoEvaluacion(
+            @PathVariable Integer equipoId,
+            @PathVariable Integer estudianteId) {
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(null);
+        }
+
+        List<MiAutoEvaluacionDTO> misNotas = evaluacionService.obtenerMisAutoEvaluaciones(equipoId, estudianteId);
+
+        return ResponseEntity.ok(misNotas);
+    }
 
     @GetMapping("/equipo/{equipoId}/evaluacion-activa-id")
     public ResponseEntity<Integer> obtenerEvaluacionActivaId(@PathVariable Integer equipoId) {

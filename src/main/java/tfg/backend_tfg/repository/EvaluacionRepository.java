@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 
 import tfg.backend_tfg.model.Evaluacion;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface EvaluacionRepository extends JpaRepository<Evaluacion, Integer> {
@@ -19,6 +20,8 @@ public interface EvaluacionRepository extends JpaRepository<Evaluacion, Integer>
 
     @Query("SELECT e.id FROM Evaluacion e WHERE e.curso.id = :cursoId")
     List<Integer> findIdsByCursoId(@Param("cursoId") Integer cursoId);
+
+    List<Evaluacion> findByFechaFin(LocalDate fechaFin);
 
 
 }

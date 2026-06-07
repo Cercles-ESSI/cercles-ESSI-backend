@@ -10,4 +10,5 @@ public interface EvaluacionDetalleRepository extends JpaRepository<EvaluacionDet
     List<EvaluacionDetalle> findByEquipoId(Integer equipoId);
     List<EvaluacionDetalle> findByEquipoIdAndEvaluacionIdIn(Integer equipoId, List<Integer> evaluacionIds);
     boolean existsByEvaluacionIdAndEvaluadorId(Integer evaluacionId, Integer evaluadorId);
+    List<EvaluacionDetalle> findByEquipoIdAndEvaluadoIdAndEvaluadorId(Integer equipoId, Integer evaluadoId, Integer evaluadorId);
 }
