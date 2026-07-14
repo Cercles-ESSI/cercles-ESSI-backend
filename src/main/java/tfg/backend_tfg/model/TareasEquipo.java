@@ -40,4 +40,8 @@ public class TareasEquipo {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "historia_usuario_id")
     private HistoriasUsuarioEquipo historiaUsuario;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "evaluacion_id")
+    private Evaluacion evaluacion;
 }

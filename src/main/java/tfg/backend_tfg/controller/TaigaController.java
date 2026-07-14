@@ -103,17 +103,17 @@ public class TaigaController {
     @GetMapping("/equipo/{equipoId}/metrics")
     public ResponseEntity<?> obtenerMetricasLocales(
             @PathVariable Integer equipoId,
-            @RequestParam String proyecto) {
+            @RequestParam String proyecto,
+            @RequestParam(required = false, defaultValue = "global") String tipoFiltro,
+            @RequestParam(required = false) Integer evaluacionId) {
 
         try {
-            // 1. Calculamos las estadísticas de las tareas
-            TareasEquipoDTO estadisticasTareas = taigaService.calcularEstadisticasEquipoTareas(equipoId, proyecto);
+            // Pasamos los filtros a los 3 métodos de tu servicio
+            TareasEquipoDTO estadisticasTareas = taigaService.calcularEstadisticasEquipoTareas(equipoId, proyecto, tipoFiltro, evaluacionId);
 
-            // 2. Calculamos las estadísticas de las historias de usuario
-            HistoriasEquipoDTO estadisticasHistorias = taigaService.calcularEstadisticasHistorias(equipoId);
-            List<HistoriaDetalleDTO> detallesTaiga = taigaService.obtenerDetallestaiga(equipoId);
+            HistoriasEquipoDTO estadisticasHistorias = taigaService.calcularEstadisticasHistorias(equipoId, tipoFiltro, evaluacionId);
 
-            // Llamamos al servicio para que lea la base de datos local y calcule los totales
+            List<HistoriaDetalleDTO> detallesTaiga = taigaService.obtenerDetallestaiga(equipoId, tipoFiltro, evaluacionId);
 
             DashboardEquipoDTO estadisticas = new DashboardEquipoDTO(
                     estadisticasTareas,
@@ -121,7 +121,6 @@ public class TaigaController {
                     detallesTaiga
             );
 
-            // Devolvemos el JSON con status 200 (OK)
             return ResponseEntity.ok(estadisticas);
 
         } catch (Exception e) {

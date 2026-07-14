@@ -1,8 +1,14 @@
 package tfg.backend_tfg.dto;
 
 import lombok.Data;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CursoSummaryDTO {
     private int id;
     private String nombreAsignatura;

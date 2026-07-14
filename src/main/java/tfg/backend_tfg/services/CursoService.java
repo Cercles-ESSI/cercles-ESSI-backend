@@ -21,10 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import tfg.backend_tfg.dto.CursoDetalleDTO;
-import tfg.backend_tfg.dto.CursoSummaryDTO;
-import tfg.backend_tfg.dto.EquipoDTO;
-import tfg.backend_tfg.dto.EstudianteDTO;
+import tfg.backend_tfg.dto.*;
 import tfg.backend_tfg.model.*;
 import tfg.backend_tfg.repository.CursoRepository;
 import tfg.backend_tfg.repository.EquipoRepository;
@@ -587,7 +584,7 @@ public class CursoService {
     
         return respuesta;
     }
-    
+
 
     public List<EstudianteDTO> obtenerProfesoresDelCurso(int cursoId) {
         // Obtener la lista de profesores del curso
@@ -612,4 +609,7 @@ public class CursoService {
         // Eliminar el curso
         cursoRepository.delete(curso);
     }
+
+
+
 }

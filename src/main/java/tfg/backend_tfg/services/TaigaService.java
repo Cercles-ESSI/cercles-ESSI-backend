@@ -378,15 +378,14 @@ public class TaigaService {
         }
     }
 
-    public HistoriasEquipoDTO calcularEstadisticasHistorias(Integer equipoId) {
-
-        // 1. Obtener el equipo y sus estudiantes
+    public HistoriasEquipoDTO calcularEstadisticasHistorias(Integer equipoId, String tipoFiltro, Integer evaluacionId) {
+// 1. Obtener el equipo y sus estudiantes
         Equipo equipo = equipoRepository.findById(equipoId)
                 .orElseThrow(() -> new RuntimeException("El equipo con ID " + equipoId + " no existe."));
 
         List<Estudiante> todosLosEstudiantes = equipo.getEstudiantes();
 
-        // 2. Obtener todas las historias y tareas del equipo
+        // 2. Obtener todas las historias del equipo
         List<HistoriasUsuarioEquipo> historiasDelEquipo = historiasRepository.findByEquipo_Id(equipoId);
         int totalHistoriasEquipo = historiasDelEquipo.size();
 
@@ -394,7 +393,14 @@ public class TaigaService {
                 .mapToInt(HistoriasUsuarioEquipo::getPuntosEsfuerzo)
                 .sum();
 
-        List<TareasEquipo> tareasDelEquipo = tareasRepository.findByEquipoId(equipoId);
+        List<TareasEquipo> tareasDelEquipo;
+
+        if ("sprint".equals(tipoFiltro) && evaluacionId != null) {
+            tareasDelEquipo = tareasRepository.findByEquipoIdAndEvaluacionId(equipoId, evaluacionId);
+        } else {
+            tareasDelEquipo = tareasRepository.findByEquipoId(equipoId);
+        }
+        // -------------------------------------------------
 
         // 3. Preparar la lista para el frontend
         List<HistoriasEstudianteDTO> metricasEstudiantes = new ArrayList<>();
@@ -424,6 +430,7 @@ public class TaigaService {
                     .count();
 
             long historiasAbiertas = historiasParticipadas - historiasCerradas;
+
             // Calcular el porcentaje de participación
             double porcentaje = 0.0;
             if (totalHistoriasEquipo > 0) {
@@ -460,7 +467,15 @@ public class TaigaService {
 
         return resultadoFinal;
     }
-    public TareasEquipoDTO calcularEstadisticasEquipoTareas(Integer equipoId, String proyecto) {
+    public TareasEquipoDTO calcularEstadisticasEquipoTareas(Integer equipoId, String proyecto, String tipoFiltro, Integer evaluacionId) {
+
+        List<TareasEquipo> tareasAProcesar;
+
+        if ("sprint".equals(tipoFiltro) && evaluacionId != null) {
+            tareasAProcesar = tareasRepository.findByEquipoIdAndEvaluacionId(equipoId, evaluacionId);
+        } else {
+            tareasAProcesar = tareasRepository.findByEquipoId(equipoId);
+        }
 
         // 1. Obtener el equipo y todos sus estudiantes matriculados
         Equipo equipo = equipoRepository.findById(equipoId)
@@ -468,9 +483,8 @@ public class TaigaService {
 
         List<Estudiante> todosLosEstudiantes = equipo.getEstudiantes();
 
-        // 2. Obtener todas las tareas de este equipo en la BD local
-        List<TareasEquipo> tareasDelEquipo = tareasRepository.findByEquipoId(equipoId);
-        int totalTareasEquipo = tareasDelEquipo.size();
+        // 2. Usamos directamente tareasAProcesar (que ya viene filtrada)
+        int totalTareasEquipo = tareasAProcesar.size();
 
         // 3. Preparar la list que viajará al frontend
         List<TareasEstudianteDTO> metricasEstudiantes = new ArrayList<>();
@@ -478,7 +492,8 @@ public class TaigaService {
         // 4. Recorrer a TODOS los estudiantes del equipo (tengan tareas o no)
         for (Estudiante estudiante : todosLosEstudiantes) {
 
-            List<TareasEquipo> listaTareasAlumno = tareasDelEquipo.stream()
+            // Aquí cambiamos tareasDelEquipo por tareasAProcesar
+            List<TareasEquipo> listaTareasAlumno = tareasAProcesar.stream()
                     .filter(tarea -> tarea.getEstudiante() != null &&
                             tarea.getEstudiante().getId() == estudiante.getId())
                     .toList();
@@ -502,8 +517,6 @@ public class TaigaService {
             dto.setNombreEstudiante(estudiante.getNombre());
             dto.setTotalTareas((int) tareasDelAlumno);
             dto.setPorcentajeTareas(porcentaje);
-
-
             dto.setTareasAbiertas((int) abiertas);
             dto.setTareasCerradas((int) cerradas);
 
@@ -518,17 +531,26 @@ public class TaigaService {
         return resultadoFinal;
     }
 
-    public List<HistoriaDetalleDTO> obtenerDetallestaiga(Integer equipoId) {
+    public List<HistoriaDetalleDTO> obtenerDetallestaiga(Integer equipoId, String tipoFiltro, Integer evaluacionId) {
 
-        // 1. Buscamos el equipo en la base de datos
+// 1. Buscamos el equipo en la base de datos
         Equipo equipo = equipoRepository.findById(equipoId)
                 .orElseThrow(() -> new RuntimeException("Equipo no encontrado con ID: " + equipoId));
 
-        // 2. Traemos todas las historias y tareas que pertenecen a este equipo
+        // 2. Traemos TODAS las historias del equipo
         List<HistoriasUsuarioEquipo> historiasDelEquipo = historiasRepository.findByEquipo_Id(equipoId);
-        List<TareasEquipo> tareasDelEquipo = tareasRepository.findByEquipoId(equipoId);
 
-        // 3. A partir de aquí, la lógica matemática es exactamente la misma que hicimos antes:
+
+        List<TareasEquipo> tareasDelEquipo;
+
+        if ("sprint".equals(tipoFiltro) && evaluacionId != null) {
+            tareasDelEquipo = tareasRepository.findByEquipoIdAndEvaluacionId(equipoId, evaluacionId);
+        } else {
+            tareasDelEquipo = tareasRepository.findByEquipoId(equipoId);
+        }
+        // -------------------------------------------------
+
+
         List<HistoriaDetalleDTO> matrizDetalles = new ArrayList<>();
         List<Estudiante> estudiantesDelEquipo = equipo.getEstudiantes();
 
@@ -540,7 +562,7 @@ public class TaigaService {
             dto.setSprint(historia.getSprint());
             dto.setPuntosEsfuerzo(historia.getPuntosEsfuerzo());
 
-            // Filtrar tareas de esta historia
+            // Filtrar tareas de esta historia (usando la lista ya filtrada por sprint o global)
             List<TareasEquipo> tareasDeEstaHistoria = tareasDelEquipo.stream()
                     .filter(tarea -> tarea.getHistoriaUsuario() != null && tarea.getHistoriaUsuario().getId().equals(historia.getId()))
                     .collect(Collectors.toList());

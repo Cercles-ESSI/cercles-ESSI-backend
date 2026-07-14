@@ -2,6 +2,8 @@ package tfg.backend_tfg.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "datos_historico")
@@ -30,5 +32,9 @@ public class DatosHistorico {
     private Integer storyPointsCompletados;
     private Integer commitsRealizados;
     private Integer lineasModificadas;
+
+    @CreationTimestamp
+    @Column(name = "fecha_guardado", updatable = false)
+    private LocalDateTime fechaGuardado;
 
 }
