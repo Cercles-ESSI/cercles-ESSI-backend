@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Data
@@ -37,5 +38,8 @@ public class HistoriasUsuarioEquipo {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "estudiante_id")
     private Estudiante responsable;
+
+    @OneToMany(mappedBy = "historiaUsuario", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TareasEquipo> tareas;
 
 }

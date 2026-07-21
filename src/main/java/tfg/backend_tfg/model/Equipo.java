@@ -48,6 +48,8 @@ public class Equipo {
     )
     private List<Estudiante> estudiantes;
 
+    @OneToMany(mappedBy = "equipo", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<HistoriasUsuarioEquipo> historiasEquipo;
 
     @Column(name = "ultima_sync_historias")
     private LocalDateTime ultimaSincronizacionHistorias;

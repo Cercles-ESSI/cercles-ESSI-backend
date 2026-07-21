@@ -201,6 +201,9 @@ public class TaigaService {
         if (equipoOpt.isPresent()) {
             Equipo equipo = equipoOpt.get();
             equipo.setTaigaProyecto(null);
+            equipo.setTaigaProyectoId(null);
+            equipo.setUltimaSincronizacionHistorias(null);
+            equipo.setUltimaSincronizacionTareas(null);
             equipoRepository.save(equipo);
             return true;
         }
