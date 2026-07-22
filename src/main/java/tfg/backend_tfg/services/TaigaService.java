@@ -656,6 +656,8 @@ public class TaigaService {
                 JsonNode tasksArray = response.getBody();
                 if (tasksArray.isArray()) {
 
+                    // Crear una lista para guardar todo de golpe
+                    List<TareasEquipo> tareasAGuardar = new ArrayList<>();
 
                     for (JsonNode taskNode : tasksArray) {
 
@@ -691,19 +693,26 @@ public class TaigaService {
                             historiaVinculada = historiasRepository.findById(idHistoriaTaiga).orElse(null);
                         }
 
-                        TareasEquipo tarea = TareasEquipo.builder()
-                                .id(taskNode.path("id").asInt())
-                                .titulo(taskNode.path("subject").asText())
-                                .estado(taskNode.path("status_extra_info").path("name").asText("New"))
-                                .equipo(equipo)
-                                .estudiante(estudianteAsignado)
-                                .fechaCreacion(fechaRealCreacion)
-                                .fechaCierre(fechaRealCierre)
-                                .historiaUsuario(historiaVinculada)
-                                .build();
+                        // Buscar la tarea en BD o crear una nueva si no existe
+                        Integer taskId = taskNode.path("id").asInt();
+                        TareasEquipo tarea = tareasRepository.findById(taskId)
+                                .orElse(new TareasEquipo());
 
-                        tareasRepository.save(tarea);
+                        // Usar setters en lugar del builder
+                        tarea.setId(taskId);
+                        tarea.setTitulo(taskNode.path("subject").asText());
+                        tarea.setEstado(taskNode.path("status_extra_info").path("name").asText("New"));
+                        tarea.setEquipo(equipo);
+                        tarea.setEstudiante(estudianteAsignado);
+                        tarea.setFechaCreacion(fechaRealCreacion);
+                        tarea.setFechaCierre(fechaRealCierre);
+                        tarea.setHistoriaUsuario(historiaVinculada);
+
+                        tareasAGuardar.add(tarea);
                     }
+
+                    // Guardar todas las tareas de golpe
+                    tareasRepository.saveAll(tareasAGuardar);
                     guardarFechaUltimaSincronizacionTareas(equipo, LocalDateTime.now(ZoneOffset.UTC));
                 }
             } else {
@@ -767,19 +776,24 @@ public class TaigaService {
                                     .findFirst()
                                     .orElse(null);
                         }
-                        HistoriasUsuarioEquipo historia = HistoriasUsuarioEquipo.builder()
-                                .id(storyNode.path("id").asInt())
-                                .titulo(storyNode.path("subject").asText())
-                                .estado(storyNode.path("status_extra_info").path("name").asText("New"))
-                                .sprint(nombreSprint)
-                                .puntosEsfuerzo(storyNode.path("total_points").asInt(0))
-                                .equipo(equipo)
-                                .responsable(estudianteResponsable)
-                                .build();
+
+                        Integer storyId = storyNode.path("id").asInt();
+
+                        HistoriasUsuarioEquipo historia = historiasRepository.findById(storyId)
+                                .orElse(new HistoriasUsuarioEquipo());
+
+                        // 2. Actualizar los campos mediante setters
+                        historia.setId(storyId);
+                        historia.setTitulo(storyNode.path("subject").asText());
+                        historia.setEstado(storyNode.path("status_extra_info").path("name").asText("New"));
+                        historia.setSprint(nombreSprint);
+                        historia.setPuntosEsfuerzo(storyNode.path("total_points").asInt(0));
+                        historia.setEquipo(equipo);
+                        historia.setResponsable(estudianteResponsable);
+
 
                         historiasAGuardar.add(historia);
                     }
-
                     // Guardamos todas las historias
                     historiasRepository.saveAll(historiasAGuardar);
                     System.out.println("Carga inicial completada: " + historiasAGuardar.size() + " historias guardadas.");
