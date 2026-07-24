@@ -405,6 +405,10 @@ public class CursoService {
                 .toList();
 
         // Crear y retornar el DTO
+        String tokenGitHub = null;
+        if(curso.getTokenGithubAsignatura() != null){
+            tokenGitHub = "********";
+        }
         return new CursoDetalleDTO(
                 curso.getId(),
                 curso.getNombreAsignatura(),
@@ -412,7 +416,7 @@ public class CursoService {
                 curso.getCuatrimestre(),
                 curso.isActivo(),
                 curso.getGithubAsignatura(),
-                curso.getTokenGithubAsignatura(),
+                tokenGitHub,
                 estudiantesSinGrupo.stream().map(EstudianteDTO::getNombre).toList(),
                 estudiantesSinGrupo.stream().map(EstudianteDTO::getCorreo).toList(),
                 estudiantesSinGrupo.stream().map(EstudianteDTO::getGrupo).toList(),
@@ -445,11 +449,21 @@ public class CursoService {
         cursoExistente.setGithubAsignatura(cursoRequest.getGithubAsignatura());
         cursoExistente.setGestionTareas(cursoRequest.getGestionTareas());
 
-        String encryptedToken = null;
-            if (cursoRequest.getTokenGithubAsignatura() != null && !cursoRequest.getTokenGithubAsignatura().isEmpty()) {
-                encryptedToken = tokenEncrypter.encrypt(cursoRequest.getTokenGithubAsignatura());
+        String tokenRecibido = cursoRequest.getTokenGithubAsignatura();
+
+        //Nos aseguramos de que no sea nulo y no sea la máscara "********"
+        if (tokenRecibido != null && !tokenRecibido.equals("********")) {
+
+            // 2. Si viene vacío, asumimos que el usuario quiere borrar el token
+            if (tokenRecibido.isEmpty()) {
+                cursoExistente.setTokenGithubAsignatura(null);
             }
-        cursoExistente.setTokenGithubAsignatura(encryptedToken);
+            // 3. Si tiene texto de verdad, lo encriptamos y lo guardamos
+            else {
+                String encryptedToken = tokenEncrypter.encrypt(tokenRecibido);
+                cursoExistente.setTokenGithubAsignatura(encryptedToken);
+            }
+        }
     
         return ResponseEntity.ok().build();
     }

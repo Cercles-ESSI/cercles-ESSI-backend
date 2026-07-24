@@ -51,6 +51,9 @@ public class Equipo {
     @OneToMany(mappedBy = "equipo", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<HistoriasUsuarioEquipo> historiasEquipo;
 
+    @OneToMany(mappedBy = "equipo", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private List<EvaluacionDetalle> evaluacionesDetalle;
+
     @Column(name = "ultima_sync_historias")
     private LocalDateTime ultimaSincronizacionHistorias;
 

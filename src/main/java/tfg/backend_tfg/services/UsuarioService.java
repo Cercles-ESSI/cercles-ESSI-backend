@@ -109,13 +109,11 @@ public class UsuarioService {
             Usuario usuario;
             String taigaUsername = correo.substring(0, correo.indexOf("@"));
 
-            Integer taigaId = taigaService.obtenerIdUser(taigaUsername);
             if (rol == Rol.Estudiante) {
                 usuario = Estudiante.builder()
                         .correo(correo)
                         .nombre(nombre)
                         .taigaUsername(taigaUsername)
-                        .taigaId(taigaId)
                         .rol(rol)
                         .build();
             } else if (rol == Rol.Profesor) {
@@ -123,7 +121,6 @@ public class UsuarioService {
                         .correo(correo)
                         .nombre(nombre)
                         .taigaUsername(taigaUsername)
-                        .taigaId(taigaId)
                         .rol(rol)
                         .build();
             } else {

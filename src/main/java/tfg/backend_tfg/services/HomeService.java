@@ -4,8 +4,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tfg.backend_tfg.dto.CursoSummaryDTO;
 import tfg.backend_tfg.dto.DashboardHomeDTO;
+import tfg.backend_tfg.dto.EvaluacionCalendarDTO;
 import tfg.backend_tfg.model.Curso;
+import tfg.backend_tfg.model.Evaluacion;
 import tfg.backend_tfg.repository.CursoRepository;
+import tfg.backend_tfg.repository.EvaluacionRepository;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -15,6 +18,11 @@ public class HomeService {
 
     @Autowired
     private CursoRepository cursoRepository;
+
+    private List<EvaluacionCalendarDTO> evaluaciones;
+
+    @Autowired
+    private EvaluacionRepository evaluacionRepository;
 
     //obtener resumen incial del estado de los cursos
     public DashboardHomeDTO obtenerResumenInicial(String email){
@@ -34,7 +42,7 @@ public class HomeService {
                 )
                 .collect(Collectors.toList());
 
-        // 3. Asignamos la lista al DTO principal
+        //Asignamos la lista al DTO principal
         response.setCursosRecientes(cursosDto);
 
         int todosCursos = cursoRepository.countCursosByProfesorCorreo(email);
@@ -46,6 +54,22 @@ public class HomeService {
         response.setTotalCursosActivos(cursosActivos);
         response.setTotalEquiposFormados(equiposformados);
         response.setTotalEstudiantesAsignados(todosEstudiantes);
+
+        //Obtener evaluaciones para el calendario
+
+        List<Evaluacion> evaluaciones = evaluacionRepository.findEvaluacionesByCurso_Profesores_Profesor_Correo(email);
+
+        List<EvaluacionCalendarDTO> evaluacionesDto = evaluaciones.stream()
+                .map(ev -> EvaluacionCalendarDTO.builder()
+                        .id(ev.getId())
+                        .fecha_inicio(ev.getFechaInicio())
+                        .fecha_fin(ev.getFechaFin())
+                        .nombreAsignatura(ev.getCurso() != null ? ev.getCurso().getNombreAsignatura() : "Sense assignatura")
+                        .build()
+                )
+                .collect(Collectors.toList());
+
+        response.setEvaluaciones(evaluacionesDto);
 
         return response;
     }

@@ -12,5 +12,6 @@ public class DashboardHomeDTO {
     private int totalEquiposFormados;
 
     private List<CursoSummaryDTO> cursosRecientes;
+    private List<EvaluacionCalendarDTO> evaluaciones;
 }
 

@@ -82,9 +82,9 @@ public class TaigaService {
 
         try {
             // Verificar si el proyecto es privado. Si no es: professor y los alumnos son miembros del proyecto
-           Map<String, Boolean> resultadosTaiga = verificarMiembros(proyecto, profesorTaigaUsername,miembrosTaigaUsernames);
-           resultadoValidacion.put("proyectoPublico", resultadosTaiga.getOrDefault("proyectoPublico", false));
-           resultadoValidacion.put("professoratEsMiembroT", resultadosTaiga.getOrDefault("professoratEsMiembroT", false));
+            Map<String, Boolean> resultadosTaiga = verificarMiembros(proyecto, profesorTaigaUsername,miembrosTaigaUsernames);
+            resultadoValidacion.put("proyectoPublico", resultadosTaiga.getOrDefault("proyectoPublico", false));
+            resultadoValidacion.put("professoratEsMiembroT", resultadosTaiga.getOrDefault("professoratEsMiembroT", false));
             resultadoValidacion.put("todosMiembrosEnProyecto", resultadosTaiga.getOrDefault("todosMiembrosEnProyecto", false));
 
             // Si el proyecto es privado , devolver todos los valores como false
@@ -144,6 +144,7 @@ public class TaigaService {
     }
 
 
+
     // 3. modificar bd si prj está bien
     public void asignarProyectp(Integer equipoId, String proyectoUrl) {
         Equipo equipo = equipoRepository.findById(equipoId)
@@ -162,7 +163,41 @@ public class TaigaService {
         String proyectoID;
         proyecto = proyecto.split("/")[0];
 
-        Integer taigaProjectId = obtenerProyectoIdPorSlug(proyecto);
+        String url = String.format("%sprojects/by_slug?slug=%s", taigaApiBaseUrl, proyecto);
+        ResponseEntity<JsonNode> response;
+        try {
+            response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), JsonNode.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("No se pudo conectar con Taiga para confirmar el proyecto: " + e.getMessage());
+        }
+
+        JsonNode proyectoJson = response.getBody();
+        if (proyectoJson == null) {
+            throw new IllegalStateException("El proyecto no existe en Taiga.");
+        }
+
+        // Extraemos el ID del proyecto de Taiga
+        Integer taigaProjectId = proyectoJson.path("id").asInt();
+
+        // 3. Extraemos el mapa de usuarios (username -> id)
+        Map<String, Integer> idsTaiga = new HashMap<>();
+        JsonNode membersNode = proyectoJson.path("members");
+        if (membersNode.isArray()) {
+            for (JsonNode member : membersNode) {
+                idsTaiga.put(member.path("username").asText(), member.path("id").asInt());
+            }
+        }
+
+        // 4. ---Actualizar IDs nulos de Taiga de cada usuario del equipo ---
+        for (Usuario alumno : equipo.getEstudiantes()) {
+            if (alumno.getTaigaId() == null) {
+                Integer idTaiga = idsTaiga.get(alumno.getTaigaUsername());
+                if (idTaiga != null) {
+                    alumno.setTaigaId(idTaiga);
+                    usuarioRepository.save(alumno); // Lo guardamos con su ID definitivo
+                }
+            }
+        }
 
         if (taigaProjectId == null) {
             throw new IllegalStateException("No se pudo obtener el ID del proyecto en Taiga para el identificador: " + proyecto);
@@ -177,7 +212,7 @@ public class TaigaService {
     }
 
     //4. obtener id de proyecto Taiga a traves del nombre
-    public Integer obtenerProyectoIdPorSlug(String proyecto) {
+    /* public Integer obtenerProyectoIdPorSlug(String proyecto) {
         String url = String.format("%sprojects/by_slug?slug=%s", taigaApiBaseUrl, proyecto);
 
         HttpHeaders headers = new HttpHeaders();
@@ -193,7 +228,7 @@ public class TaigaService {
             System.err.println("Error al obtener ID del proyecto de Taiga: " + e.getMessage());
         }
         return null;
-    }
+    }*/
 
     //5. desconectar proyecto
     public boolean desconectarProyecto(Integer equipoId) {
@@ -227,6 +262,8 @@ public class TaigaService {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode usersArray = response.getBody();
+
+                System.out.println("--- TAIGA DEBUG: JSON recibido: " + usersArray.toString());
                 if (usersArray.isArray()) {
                     for (JsonNode userNode : usersArray) {
                         if (userNode.path("username").asText().equals(username)) {
