@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import jakarta.transaction.Transactional;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
@@ -41,6 +42,9 @@ public class CursoService {
     private UsuarioRepository usuarioRepository;
     @Autowired
     private UsuarioService usuarioService;
+
+    @Autowired
+    private TaigaService taigaService;
 
     @Autowired
     private EquipoRepository equipoRepository;
@@ -428,6 +432,7 @@ public class CursoService {
 
 
     //Modificar datos basicos curso
+    @Transactional
     public ResponseEntity<?> modificarDatosCurso(Curso cursoExistente, CursoRequest cursoRequest) throws Exception {
         if (!cursoExistente.getNombreAsignatura().equals(cursoRequest.getNombreAsignatura()) ||
             cursoExistente.getAñoInicio() != cursoRequest.getAñoInicio() ||
@@ -447,7 +452,22 @@ public class CursoService {
         cursoExistente.setAñoInicio(cursoRequest.getAñoInicio());
         cursoExistente.setCuatrimestre(cursoRequest.getCuatrimestre());
         cursoExistente.setGithubAsignatura(cursoRequest.getGithubAsignatura());
-        cursoExistente.setGestionTareas(cursoRequest.getGestionTareas());
+
+        if(cursoExistente.getGestionTareas().equals("Taiga") && cursoRequest.getGestionTareas().equals("GitHub")){
+            //Cambiar la gestión de tareas del curso
+            cursoExistente.setGestionTareas(cursoRequest.getGestionTareas());
+
+            //Obtener los equipos del curso y desconectarlos de Taiga
+            List <Equipo> equipos = cursoExistente.getEquipos();
+            if (equipos != null && !equipos.isEmpty()) {
+                for (Equipo equipo : equipos) {
+                    taigaService.desconectarProyecto(equipo.getId());
+                }
+            }
+        }else{
+            cursoExistente.setGestionTareas(cursoRequest.getGestionTareas());
+        }
+
 
         String tokenRecibido = cursoRequest.getTokenGithubAsignatura();
 

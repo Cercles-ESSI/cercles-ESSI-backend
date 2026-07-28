@@ -2,6 +2,8 @@ package tfg.backend_tfg.services;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -227,7 +229,7 @@ public class GithubService {
     
 
     //6. obtener metricas de un repo
-    public Map<String, Object> obtenerMetricasRepositorio(String organizacion, String repo, List<String> usuarios, String accessToken) {
+    public Map<String, Object> obtenerMetricasRepositorio(String organizacion, String repo, List<String> usuarios, String accessToken, Boolean gestionProyecto){
         String commitsBaseUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/commits";
         String pullsBaseUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/pulls";
     
@@ -242,171 +244,146 @@ public class GithubService {
         }
     
         List<String> globalIssueDetails = new ArrayList<>();
-    
-        try {
-            // Obtener commits con GraphQL
-            List<JsonNode> commits = obtenerTodosCommitsGraphQL(organizacion, repo, accessToken);
 
-            if (commits.isEmpty()) {
-                System.out.println("No se encontraron commits para el repositorio: " + repo);
-            } else {
-                for (JsonNode commitNode : commits) {
-                    String author = commitNode.path("author").path("user").path("login").asText(null);
-                    String message = commitNode.path("message").asText("");
-                    int additions = commitNode.path("additions").asInt(0);
-                    int deletions = commitNode.path("deletions").asInt(0);
+        if(!gestionProyecto){
+            procesarCommitsYPRsGraphQL(organizacion, repo, accessToken, metricsMap);
+        }else{
+            try{
+                // Obtener Issues y Métricas Globales
+                String issuesUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/issues?state=all&per_page=100";
+                Map<String, Object> repoGlobalMetrics = obtenerMetricasGlobalesIssues(issuesUrl, usuarios, metricsMap, entity);
 
-                    if (author != null && metricsMap.containsKey(author)) {
-                        MetricasUsuarioDTO metrics = metricsMap.get(author);
+                // Agregar detalles de issues al listado global
+                globalIssueDetails.addAll((List<String>) repoGlobalMetrics.get("issueDetails"));
 
-                        if (message.startsWith("Merge pull request") || message.startsWith("Merge branch") || message.startsWith("Merge remote-tracking branch")) {
-                            metrics.setPullRequestsMerged(metrics.getPullRequestsMerged() + 1);
-                        } else {
-                            metrics.setTotalCommits(metrics.getTotalCommits() + 1);
-                            metrics.setLinesAdded(metrics.getLinesAdded() + additions);
-                            metrics.setLinesRemoved(metrics.getLinesRemoved() + deletions);
-                        }
-
-                        
-                    }
-                }
+            } catch (Exception e) {
+                System.err.println("Error al obtener métricas del repositorio " + repo + ": " + e.getMessage());
             }
-
-    
-            // Obtener Pull Requests con paginación
-            int page = 1;
-            boolean hasMore = true;
-            while (hasMore) {
-                String pullsUrl = pullsBaseUrl + "?state=all&per_page=100&page=" + page;
-                ResponseEntity<JsonNode> pullsResponse = restTemplate.exchange(pullsUrl, HttpMethod.GET, entity, JsonNode.class);
-                JsonNode pulls = pullsResponse.getBody();
-    
-                if (pulls == null || pulls.isEmpty()) {
-                    hasMore = false;
-                } else {
-                    for (JsonNode pull : pulls) {
-                        String author = pull.path("user").path("login").asText();
-                        if (metricsMap.containsKey(author)) {
-                            MetricasUsuarioDTO metrics = metricsMap.get(author);
-                            metrics.setPullRequestsCreated(metrics.getPullRequestsCreated() + 1);
-                        }
-                    }
-                    page++;
-                }
-            }
-    
-            // Obtener Issues y Métricas Globales
-            String issuesUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/issues?state=all&per_page=100";
-            Map<String, Object> repoGlobalMetrics = obtenerMetricasGlobalesIssues(issuesUrl, usuarios, metricsMap, entity);
-    
-            // Agregar detalles de issues al listado global
-            globalIssueDetails.addAll((List<String>) repoGlobalMetrics.get("issueDetails"));
-    
-        } catch (Exception e) {
-            System.err.println("Error al obtener métricas del repositorio " + repo + ": " + e.getMessage());
         }
-    
+
+
         Map<String, Object> result = new HashMap<>();
+
         result.put("userMetrics", new ArrayList<>(metricsMap.values()));
         result.put("globalIssueDetails", globalIssueDetails);
     
         return result;
     }
 
-    //obtener commits y lineaas utilizando graphql
-    public List<JsonNode> obtenerTodosCommitsGraphQL(String organizacion, String repo, String accessToken) {
+    //obtener commits, lineaas y pull requests utilizando graphql
+    private void procesarCommitsYPRsGraphQL(String organizacion, String repo, String accessToken, Map<String, MetricasUsuarioDTO> metricsMap) {
         String graphqlUrl = "https://api.github.com/graphql";
-    
+
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + accessToken);
         headers.set("Content-Type", "application/json");
-    
-        String commitsQuery = """
-            query($owner: String!, $repo: String!, $first: Int!, $after: String) {
-              repository(owner: $owner, name: $repo) {
-                defaultBranchRef {
-                  target {
-                    ... on Commit {
-                      history(first: $first, after: $after) {
-                        pageInfo {
-                          hasNextPage
-                          endCursor
-                        }
-                        edges {
-                          node {
-                            message
-                            additions
-                            deletions
-                            author {
-                              user {
-                                login
-                              }
-                            }
-                          }
-                        }
+
+        String query = """
+        query($owner: String!, $repo: String!, $cursorCommits: String, $cursorPRs: String) {
+          repository(owner: $owner, name: $repo) {
+            defaultBranchRef {
+              target {
+                ... on Commit {
+                  history(first: 100, after: $cursorCommits) {
+                    pageInfo { hasNextPage endCursor }
+                    edges {
+                      node {
+                        message additions deletions
+                        author { user { login } }
                       }
                     }
                   }
                 }
               }
             }
-        """;
-    
-        List<JsonNode> commits = new ArrayList<>();
-        String endCursor = null;
-        boolean hasNextPage = true;
-    
+            pullRequests(first: 100, after: $cursorPRs) {
+              pageInfo { hasNextPage endCursor }
+              nodes { author { login } }
+            }
+          }
+        }
+    """;
+
+        boolean hasNextCommits = true;
+        String cursorCommits = null;
+        boolean hasNextPRs = true;
+        String cursorPRs = null;
+
         try {
-            while (hasNextPage) {
+            while (hasNextCommits || hasNextPRs) {
                 Map<String, Object> variables = new HashMap<>();
                 variables.put("owner", organizacion);
                 variables.put("repo", repo);
-                variables.put("first", 100);
-                variables.put("after", endCursor);
-    
-                Map<String, Object> payload = Map.of("query", commitsQuery, "variables", variables);
-    
+                variables.put("cursorCommits", cursorCommits);
+                variables.put("cursorPRs", cursorPRs);
+
+                Map<String, Object> payload = Map.of("query", query, "variables", variables);
                 HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
                 ResponseEntity<JsonNode> response = restTemplate.postForEntity(graphqlUrl, entity, JsonNode.class);
-    
+
                 if (!response.getStatusCode().is2xxSuccessful()) {
-                    System.err.println("Error al obtener datos de GraphQL. Código de estado: " + response.getStatusCode());
-                    System.err.println("Respuesta: " + response.getBody());
+                    System.err.println("Error al obtener datos de GraphQL: " + response.getStatusCode());
                     break;
                 }
-    
-                JsonNode body = response.getBody();
-    
-                JsonNode history = body.path("data")
-                        .path("repository")
-                        .path("defaultBranchRef")
-                        .path("target")
-                        .path("history");
-    
-                if (history.isMissingNode()) {
-                    System.err.println("No se encontró historial de commits en la respuesta para el repositorio: " + repo);
-                    System.err.println("Contenido del nodo 'repository': " + body.path("data").path("repository"));
-                    break;
+
+                JsonNode repositoryNode = response.getBody().path("data").path("repository");
+
+                // 1. Procesar Commits
+                if (hasNextCommits) {
+                    JsonNode history = repositoryNode.path("defaultBranchRef").path("target").path("history");
+                    if (!history.isMissingNode()) {
+                        for (JsonNode edge : history.path("edges")) {
+                            JsonNode commitNode = edge.path("node");
+                            String author = commitNode.path("author").path("user").path("login").asText(null);
+                            String message = commitNode.path("message").asText("");
+                            int additions = commitNode.path("additions").asInt(0);
+                            int deletions = commitNode.path("deletions").asInt(0);
+
+                            if (author != null && metricsMap.containsKey(author)) {
+                                MetricasUsuarioDTO metrics = metricsMap.get(author);
+                                if (message.startsWith("Merge pull request") || message.startsWith("Merge branch") || message.startsWith("Merge remote-tracking branch")) {
+                                    metrics.setPullRequestsMerged(metrics.getPullRequestsMerged() + 1);
+                                } else {
+                                    metrics.setTotalCommits(metrics.getTotalCommits() + 1);
+                                    metrics.setLinesAdded(metrics.getLinesAdded() + additions);
+                                    metrics.setLinesRemoved(metrics.getLinesRemoved() + deletions);
+                                }
+                            }
+                        }
+                        hasNextCommits = history.path("pageInfo").path("hasNextPage").asBoolean(false);
+                        cursorCommits = history.path("pageInfo").path("endCursor").asText(null);
+                    } else {
+                        hasNextCommits = false;
+                    }
                 }
-    
-                for (JsonNode commit : history.path("edges")) {
-                    commits.add(commit.path("node"));
+
+                // 2. Procesar Pull Requests
+                if (hasNextPRs) {
+                    JsonNode pullRequests = repositoryNode.path("pullRequests");
+                    if (!pullRequests.isMissingNode()) {
+                        for (JsonNode prNode : pullRequests.path("nodes")) {
+                            String author = prNode.path("author").path("login").asText(null);
+                            if (author != null && metricsMap.containsKey(author)) {
+                                MetricasUsuarioDTO metrics = metricsMap.get(author);
+                                metrics.setPullRequestsCreated(metrics.getPullRequestsCreated() + 1);
+                            }
+                        }
+                        hasNextPRs = pullRequests.path("pageInfo").path("hasNextPage").asBoolean(false);
+                        cursorPRs = pullRequests.path("pageInfo").path("endCursor").asText(null);
+                    } else {
+                        hasNextPRs = false;
+                    }
                 }
-    
-                hasNextPage = history.path("pageInfo").path("hasNextPage").asBoolean();
-                endCursor = history.path("pageInfo").path("endCursor").asText(null);
             }
         } catch (Exception e) {
-            System.err.println("Excepción al obtener commits con GraphQL para el repositorio " + repo + ": " + e.getMessage());
+            System.err.println("Excepción procesando GraphQL para el repositorio " + repo + ": " + e.getMessage());
             e.printStackTrace();
         }
-    
-        return commits;
     }
     
     
 
-    //7. get issues globales
+    //7. get issues globales (gestion de proyecto)
     public Map<String, Object> obtenerMetricasGlobalesIssues(String issuesUrl, List<String> usuarios, Map<String, MetricasUsuarioDTO> metricsMap, HttpEntity<?> entity) {
         List<String> issueDetails = new ArrayList<>();
     
@@ -466,58 +443,60 @@ public class GithubService {
     
     
     //8. obtener metricas de una org
-    public Map<String, Object> obtenerMetricasOrganizacion(String organizacion, List<String> usuarios, String accessToken, List<Integer> estudiantesIds) {
+    public Map<String, Object> obtenerMetricasOrganizacion(String organizacion, List<String> usuarios, String accessToken, List<Integer> estudiantesIds, Boolean gestionProyecto) {
         List<String> repositorios = obtenerRepositorios(organizacion, accessToken);
-    
-        // Filtrar repositorios no vacíos
-        List<String> repositoriosNoVacios = repositorios.stream()
-                .filter(repo -> {
-                    if (isRepositorioVacio(organizacion, repo, accessToken)) {
-                        return false; // Excluir repositorios vacíos
-                    }
-                    return true; // Incluir repositorios no vacíos
-                })
-                .collect(Collectors.toList());
-    
+
         List<String> globalIssueDetails = new ArrayList<>();
         Map<String, String> usernameToNombre = estudianteRepository.findAllById(estudiantesIds)
                 .stream()
                 .collect(Collectors.toMap(Estudiante::getGitUsername, Estudiante::getNombre));
-    
+
         Map<String, MetricasUsuarioDTO> aggregatedMetrics = new HashMap<>();
         for (String usuario : usuarios) {
             String nombre = usernameToNombre.getOrDefault(usuario, "Desconocido");
             aggregatedMetrics.put(usuario, new MetricasUsuarioDTO(nombre, usuario));
         }
-    
-        // Procesar repositorios no vacíos en paralelo
-        List<CompletableFuture<Map<String, Object>>> futures = repositoriosNoVacios.stream()
-                .map(repo -> CompletableFuture.supplyAsync(() -> obtenerMetricasRepositorio(organizacion, repo, usuarios, accessToken)))
-                .collect(Collectors.toList());
-    
-        // Esperar a que se completen todas las tareas
+
+        // 1. Crear un pool de hilos adaptado al número de repositorios
+        int numberOfThreads = Math.min(repositorios.size(), 30);
+        Executor customExecutor = Executors.newFixedThreadPool(Math.max(numberOfThreads, 1));
+
+        // 2. Procesar TODOS los repositorios en paralelo usando el customExecutor
+        // Ya no comprobamos si están vacíos previamente, ahorrando N peticiones HTTP.
+        List<CompletableFuture<Map<String, Object>>> futures = repositorios.stream()
+                .map(repo -> CompletableFuture.supplyAsync(
+                        () -> obtenerMetricasRepositorio(organizacion, repo, usuarios, accessToken, gestionProyecto),
+                        customExecutor // Pasamos el pool de hilos optimizado
+                ))
+                .toList();
+
+        // 3. Esperar a que se completen todas las tareas
         for (CompletableFuture<Map<String, Object>> future : futures) {
             try {
-                Map<String, Object> repoMetrics = future.get(); // Espera a que la tarea termine
-                if (!repoMetrics.isEmpty()) {
+                Map<String, Object> repoMetrics = future.join();
+                if (repoMetrics != null && !repoMetrics.isEmpty()) {
                     List<MetricasUsuarioDTO> userMetrics = (List<MetricasUsuarioDTO>) repoMetrics.get("userMetrics");
                     List<String> repoIssueDetails = (List<String>) repoMetrics.get("globalIssueDetails");
+
                     for (MetricasUsuarioDTO userMetric : userMetrics) {
                         MetricasUsuarioDTO aggregatedMetric = aggregatedMetrics.get(userMetric.getUsername());
-                        aggregatedMetric.combine(userMetric);
+                        if (aggregatedMetric != null) {
+                            aggregatedMetric.combine(userMetric);
+                        }
                     }
-                    globalIssueDetails.addAll(repoIssueDetails);
+                    if (repoIssueDetails != null) {
+                        globalIssueDetails.addAll(repoIssueDetails);
+                    }
                 }
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (Exception e) {
                 System.err.println("Error procesando métricas de repositorio: " + e.getMessage());
             }
         }
-    
+
         Map<String, Object> result = new HashMap<>();
         result.put("userMetrics", new ArrayList<>(aggregatedMetrics.values()));
         result.put("globalIssueDetails", globalIssueDetails);
-        System.out.println("RESULT " + result);
-    
+
         return result;
     }
     

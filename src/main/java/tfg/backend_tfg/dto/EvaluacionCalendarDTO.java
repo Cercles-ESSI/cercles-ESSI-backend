@@ -8,6 +8,7 @@ import java.time.LocalDate;
 @Builder
 public class EvaluacionCalendarDTO {
     private Integer id;
+    private Integer numeroIteracion;
     private LocalDate fecha_inicio;
     private LocalDate fecha_fin;
     private Integer curso_id;

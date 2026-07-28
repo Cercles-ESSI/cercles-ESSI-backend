@@ -15,6 +15,17 @@ import java.util.List;
 public interface TareasEquipoRepository extends JpaRepository<TareasEquipo, Integer> {
     List<TareasEquipo> findByEquipoId(Integer equipoId);
 
+    //Eliminar todo registro del equipo
+    @Transactional
+    @Modifying
+    @Query("DELETE FROM TareasEquipo t WHERE t.equipo.id = :equipoId")
+    void deleteByEquipoId(@Param("equipoId") Integer equipoId);
+
+    //Obtener las tareas pendientes de un estudiante en el Taiga
+    // SELECT COUNT(*) FROM tareas_equipo WHERE estudiante_id = ? AND fecha_cierre IS NULL
+    Integer countByEstudianteIdAndFechaCierreIsNull(Integer estudianteId);
+
+    //Historico (revisar)
     @Modifying
     @Transactional
     @Query("UPDATE TareasEquipo t SET t.evaluacion = :evaluacion " +

@@ -235,10 +235,17 @@ public class TaigaService {
         Optional<Equipo> equipoOpt = equipoRepository.findById(equipoId);
         if (equipoOpt.isPresent()) {
             Equipo equipo = equipoOpt.get();
+
+            //Limpiar los campos en la tabla equipo relacionado con Taiga
             equipo.setTaigaProyecto(null);
             equipo.setTaigaProyectoId(null);
             equipo.setUltimaSincronizacionHistorias(null);
             equipo.setUltimaSincronizacionTareas(null);
+
+            //Eliminar los datos de la tabla relacionada
+            tareasRepository.deleteByEquipoId(equipoId);
+            historiasRepository.deleteByEquipoId(equipoId);
+
             equipoRepository.save(equipo);
             return true;
         }

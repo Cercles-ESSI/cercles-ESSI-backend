@@ -4,12 +4,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import tfg.backend_tfg.model.Curso;
+import tfg.backend_tfg.model.Equipo;
 import tfg.backend_tfg.security.TokenEncrypter;
 import tfg.backend_tfg.services.EquipoService;
 import tfg.backend_tfg.services.GithubService;
@@ -28,9 +31,10 @@ public class GitHubController {
     @Autowired
     private final EquipoService equipoService;
     private final TokenEncrypter tokenEncrypter;
+    @Autowired
+    private StringHttpMessageConverter stringHttpMessageConverter;
 
 
-    
     public GitHubController(GithubService githubService, UsuarioService usuarioService, EquipoService equipoService, TokenEncrypter tokenEncrypter) {
         this.githubService = githubService;
         this.usuarioService = usuarioService;
@@ -108,7 +112,7 @@ public class GitHubController {
 
     @PreAuthorize("hasAuthority('PROFESOR')")
     @GetMapping("/equipo/{idEquipo}/metrics/{organizacion}")
-    public ResponseEntity<?> obtenerMetricas(@PathVariable String organizacion, @RequestParam List<Integer> estudiantesIds, @PathVariable Integer idEquipo) {
+    public ResponseEntity<?> obtenerMetricas(@PathVariable String organizacion, @RequestParam List<Integer> estudiantesIds, @PathVariable Integer idEquipo, @RequestParam Boolean isGithub) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
@@ -130,7 +134,7 @@ public class GitHubController {
             }
             // Llamada al servicio con el token personal
             Map<String, Object> metricasOrganizacion = githubService.obtenerMetricasOrganizacion(
-                    organizacion, usuarios, tokenDescifrado, estudiantesIds
+                    organizacion, usuarios, tokenDescifrado, estudiantesIds, isGithub
             );
 
             return ResponseEntity.ok(metricasOrganizacion);

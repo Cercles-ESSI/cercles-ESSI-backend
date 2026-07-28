@@ -71,6 +71,8 @@ public class EquipoService {
         return equipoRepository.findByEquipoId(idEquipo).getTokenGithubAsignatura();
     }
 
+
+
     public void validarEstudianteCurso(int estudianteId, int cursoId) {
         // Crear la clave compuesta
         EstudianteCursoId id = new EstudianteCursoId(estudianteId, cursoId);

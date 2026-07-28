@@ -22,7 +22,12 @@ public interface EvaluacionRepository extends JpaRepository<Evaluacion, Integer>
     List<Integer> findIdsByCursoId(@Param("cursoId") Integer cursoId);
 
     List<Evaluacion> findByFechaFin(LocalDate fechaFin);
+
+    //Encontrar todas las evaluaciones de un professor con su correo
     List<Evaluacion> findEvaluacionesByCurso_Profesores_Profesor_Correo(String correo);
+
+    //Encontrar todas las evaluaciones de un estudiante con su correo
+    List<Evaluacion> findEvaluacionesByCurso_Estudiantes_Estudiante_Correo(String correo);
 
 
 }

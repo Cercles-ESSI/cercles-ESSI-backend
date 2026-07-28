@@ -8,6 +8,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tfg.backend_tfg.model.Rol;
 import tfg.backend_tfg.model.Usuario;
 import tfg.backend_tfg.services.HomeService;
 import tfg.backend_tfg.dto.DashboardHomeDTO;
@@ -25,7 +26,6 @@ public class HomeController {
     private UsuarioService usuarioService;
 
     @GetMapping("/resumen-inicio")
-    @PreAuthorize("hasAuthority('PROFESOR')")
     public ResponseEntity<?> obtenerResumenCurso() {
 
 
@@ -40,10 +40,14 @@ public class HomeController {
 
         // Buscar el usuario en la base de datos usando el correo electrónico
         Optional<Usuario> usuarioOpt = usuarioService.getOptUsuarioByCorreo(email);
+
         if (usuarioOpt.isEmpty()) {
             return ResponseEntity.status(404).body("Usuario no encontrado");
         }
-        DashboardHomeDTO dashboardData = homeService.obtenerResumenInicial(email);
+        Usuario usuario = usuarioOpt.get();
+        Rol rolUsuario = usuario.getRol();
+        Integer usuarioId = usuario.getId();
+        DashboardHomeDTO dashboardData = homeService.obtenerResumenInicial(usuarioId, email, rolUsuario);
         return ResponseEntity.ok(dashboardData);
     }
 

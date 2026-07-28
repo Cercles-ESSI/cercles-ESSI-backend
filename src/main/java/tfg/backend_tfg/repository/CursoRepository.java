@@ -20,6 +20,10 @@ public interface CursoRepository extends JpaRepository<Curso, Integer> {
 
     List<Curso> findAllByProfesoresContaining(Profesor profesor);
 
+    // Total de cursos activos del estudiante
+    @Query("SELECT COUNT(DISTINCT c) FROM Curso c JOIN c.equipos eq JOIN eq.estudiantes est WHERE est.id = :usuarioId AND c.activo = true")
+    int countCursosActivosByEstudianteId(@Param("usuarioId") Integer usuarioId);
+
     // Trae los últimos 4 cursos creados (ordenados por ID de mayor a menor)
     List<Curso> findTop4ByProfesores_Profesor_CorreoOrderByIdDesc(String correo);
 
@@ -28,8 +32,8 @@ public interface CursoRepository extends JpaRepository<Curso, Integer> {
     int countCursosByProfesorCorreo(@Param("correo") String correo);
 
     //Total de cursos activos del profesor
-    @Query("SELECT COUNT(c) FROM Curso c JOIN c.profesores pc WHERE pc.profesor.correo = :correo AND c.activo = true")
-    int countCursosActivosByProfesorCorreo(@Param("correo") String correo);
+    @Query("SELECT COUNT(c) FROM Curso c JOIN c.profesores pc WHERE pc.profesor.id = :usuarioId AND c.activo = true")
+    int countCursosActivosByProfesorId(@Param("usuarioId") Integer usuarioId);
 
     // Total de estudiantes en los cursos de este profesor
     @Query("SELECT COALESCE(SUM(SIZE(c.estudiantes)), 0) FROM Curso c JOIN c.profesores pc WHERE pc.profesor.correo = :correo")
