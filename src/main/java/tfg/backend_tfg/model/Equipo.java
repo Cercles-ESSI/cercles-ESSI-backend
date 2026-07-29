@@ -60,4 +60,6 @@ public class Equipo {
     @Column(name = "ultima_sync_tareas")
     private LocalDateTime ultimaSincronizacionTareas;
 
+    @Column(name = "ultima_sync_git")
+    private LocalDateTime ultimaSincronizacionGit;
 }

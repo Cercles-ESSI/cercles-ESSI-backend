@@ -119,23 +119,7 @@ public class GitHubController {
                 return ResponseEntity.status(403).body(Map.of("error", "Usuario no autenticado"));
             }
 
-            // Obtener usuarios GitHub de los estudiantes
-            List<String> usuarios = usuarioService.getAllUsuariosById(estudiantesIds);
-
-            String tokenGithub = equipoService.getTokenEquipo(idEquipo);
-
-            String tokenDescifrado = null;
-            try {
-                if (tokenGithub != null) {
-                    tokenDescifrado = tokenEncrypter.decrypt(tokenGithub);
-                }
-            } catch (Exception e) {
-                throw new RuntimeException("Error al descifrar el token del curso.", e);
-            }
-            // Llamada al servicio con el token personal
-            Map<String, Object> metricasOrganizacion = githubService.obtenerMetricasOrganizacion(
-                    organizacion, usuarios, tokenDescifrado, estudiantesIds, isGithub
-            );
+            Map<String, Object> metricasOrganizacion = githubService.consultarMetricasOrganizacion(idEquipo);
 
             return ResponseEntity.ok(metricasOrganizacion);
         } catch (Exception e) {

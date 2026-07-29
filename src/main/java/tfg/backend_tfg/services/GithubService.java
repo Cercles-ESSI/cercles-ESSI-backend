@@ -1,6 +1,7 @@
 package tfg.backend_tfg.services;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -21,12 +22,16 @@ import org.apache.http.util.EntityUtils;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.util.Pair;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
@@ -37,10 +42,13 @@ import tfg.backend_tfg.dto.MetricasLineasUsuarioDTO;
 import tfg.backend_tfg.dto.MetricasUsuarioDTO;
 import tfg.backend_tfg.model.Equipo;
 import tfg.backend_tfg.model.Estudiante;
+import tfg.backend_tfg.model.MetricasEstudiante;
 import tfg.backend_tfg.model.Usuario;
 import tfg.backend_tfg.repository.EquipoRepository;
 import tfg.backend_tfg.repository.EstudianteRepository;
+import tfg.backend_tfg.repository.MetricasEstudianteRepository;
 import tfg.backend_tfg.repository.UsuarioRepository;
+import tfg.backend_tfg.security.TokenEncrypter;
 
 @Service
 public class GithubService {
@@ -60,7 +68,14 @@ public class GithubService {
     private EquipoRepository equipoRepository;
     @Autowired
     private EstudianteRepository estudianteRepository;
+    @Autowired
+    private MetricasEstudianteRepository metricasEstudianteRepository;
 
+    @Autowired
+    private EquipoService equipoService;
+
+    @Autowired
+    private TokenEncrypter tokenEncrypter;
 
     //1-8 funciones datos de una org
 
@@ -168,10 +183,44 @@ public class GithubService {
     // 4. modificar bd si org está bien
     public void asignarOrganizacion(Integer equipoId, String organizacionUrl) {
         Equipo equipo = equipoRepository.findById(equipoId)
-            .orElseThrow(() -> new IllegalStateException("Equipo no encontrado"));
+                .orElseThrow(() -> new IllegalStateException("Equipo no encontrado"));
 
         equipo.setGitOrganizacion(organizacionUrl.replace("https://github.com/", "").replaceAll("/$", ""));
         equipoRepository.save(equipo);
+        List<String> gitUsernames = equipo.getEstudiantes().stream()
+                .map(Estudiante::getGitUsername) // Extrae el username
+                .filter(username -> username != null && !username.isEmpty()) // Filtra si alguno no tiene usuario
+                .collect(Collectors.toList());
+
+        List<Integer> estudiantesIds = equipo.getEstudiantes().stream()
+                .map(Estudiante::getId)
+                .collect(Collectors.toList());
+
+        Boolean gestionProyecto = false;
+        String tokenGithub = equipoService.getTokenEquipo(equipoId);
+
+        String tokenDescifrado = null;
+        try {
+            if (tokenGithub != null) {
+                tokenDescifrado = tokenEncrypter.decrypt(tokenGithub);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error al descifrar el token del curso.", e);
+        }
+
+        if (tokenDescifrado != null) {
+            final String tokenParaHilo = tokenDescifrado;
+            CompletableFuture.runAsync(() -> {
+                obtenerMetricasOrganizacion(
+                        equipo.getGitOrganizacion(),
+                        gitUsernames,
+                        tokenParaHilo,
+                        estudiantesIds,
+                        gestionProyecto,
+                        equipoId
+                );
+            });
+        }
     }
 
     //5. desconectar organizacion
@@ -180,6 +229,8 @@ public class GithubService {
         if (equipoOpt.isPresent()) {
             Equipo equipo = equipoOpt.get();
             equipo.setGitOrganizacion(null);
+            equipo.setUltimaSincronizacionGit(null);
+            metricasEstudianteRepository.deleteByEquipoId(equipoId);
             equipoRepository.save(equipo);
             return true;
         }
@@ -443,17 +494,21 @@ public class GithubService {
     
     
     //8. obtener metricas de una org
-    public Map<String, Object> obtenerMetricasOrganizacion(String organizacion, List<String> usuarios, String accessToken, List<Integer> estudiantesIds, Boolean gestionProyecto) {
+    public void obtenerMetricasOrganizacion(String organizacion, List<String> usuarios, String accessToken, List<Integer> estudiantesIds, Boolean gestionProyecto, Integer equipoId) {
         List<String> repositorios = obtenerRepositorios(organizacion, accessToken);
 
         List<String> globalIssueDetails = new ArrayList<>();
-        Map<String, String> usernameToNombre = estudianteRepository.findAllById(estudiantesIds)
-                .stream()
-                .collect(Collectors.toMap(Estudiante::getGitUsername, Estudiante::getNombre));
+        List<Estudiante> estudiantesList = estudianteRepository.findAllById(estudiantesIds);
+        Map<String, Estudiante> usernameToEstudiante = estudiantesList.stream()
+                .collect(Collectors.toMap(
+                        Estudiante::getGitUsername,
+                        estudiante -> estudiante
+                ));
 
         Map<String, MetricasUsuarioDTO> aggregatedMetrics = new HashMap<>();
         for (String usuario : usuarios) {
-            String nombre = usernameToNombre.getOrDefault(usuario, "Desconocido");
+            Estudiante est = usernameToEstudiante.get(usuario);
+            String nombre = (est != null) ? est.getNombre() : "Desconocido";
             aggregatedMetrics.put(usuario, new MetricasUsuarioDTO(nombre, usuario));
         }
 
@@ -492,14 +547,69 @@ public class GithubService {
                 System.err.println("Error procesando métricas de repositorio: " + e.getMessage());
             }
         }
+        Equipo equipo = equipoRepository.findById(equipoId)
+                .orElseThrow(() -> new RuntimeException("Equipo no encontrado"));
+        List<MetricasEstudiante> metricasParaGuardar = new ArrayList<>();
+
+        for (MetricasUsuarioDTO dto : aggregatedMetrics.values()) {
+            Estudiante estudiante = usernameToEstudiante.get(dto.getUsername());
+
+            if (estudiante != null) {
+                // Buscamos si ya existen métricas previas. Si no existen, creamos un objeto nuevo.
+                MetricasEstudiante metricas = metricasEstudianteRepository
+                        .findByEstudianteIdAndEquipoId(estudiante.getId(), equipo.getId())
+                        .orElse(new MetricasEstudiante());
+
+                // Asignamos las relaciones ManyToOne
+                metricas.setEstudiante(estudiante);
+                metricas.setEquipo(equipo);
+
+                // Actualizamos los valores numéricos
+                metricas.setTotalCommits(dto.getTotalCommits());
+                metricas.setLinesAdded(dto.getLinesAdded());
+                metricas.setLinesRemoved(dto.getLinesRemoved());
+                metricas.setPullRequestsMerged(dto.getPullRequestsMerged());
+
+                metricasParaGuardar.add(metricas);
+            }
+        }
+
+        metricasEstudianteRepository.saveAll(metricasParaGuardar);
+
+        equipo.setUltimaSincronizacionGit(LocalDateTime.now());
+        equipoRepository.save(equipo);
 
         Map<String, Object> result = new HashMap<>();
         result.put("userMetrics", new ArrayList<>(aggregatedMetrics.values()));
         result.put("globalIssueDetails", globalIssueDetails);
 
+    }
+
+    public Map<String, Object> consultarMetricasOrganizacion(Integer equipoId) {
+        List<MetricasEstudiante> metricasBD = metricasEstudianteRepository.findByEquipoId(equipoId);
+
+        List<MetricasUsuarioDTO> userMetrics = new ArrayList<>();
+
+        for (MetricasEstudiante metrica : metricasBD) {
+            Estudiante estudiante = metrica.getEstudiante();
+
+            MetricasUsuarioDTO dto = new MetricasUsuarioDTO(estudiante.getNombre(), estudiante.getGitUsername());
+
+            dto.setTotalCommits(metrica.getTotalCommits() != null ? metrica.getTotalCommits() : 0);
+            dto.setLinesAdded(metrica.getLinesAdded() != null ? metrica.getLinesAdded() : 0);
+            dto.setLinesRemoved(metrica.getLinesRemoved() != null ? metrica.getLinesRemoved() : 0);
+            dto.setPullRequestsMerged(metrica.getPullRequestsMerged() != null ? metrica.getPullRequestsMerged() : 0);
+
+            userMetrics.add(dto);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("userMetrics", userMetrics);
+        result.put("globalIssueDetails", new ArrayList<String>());
+
         return result;
     }
-    
+
  
 
     
