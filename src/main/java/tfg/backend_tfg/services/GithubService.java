@@ -1,7 +1,10 @@
 package tfg.backend_tfg.services;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -280,7 +283,7 @@ public class GithubService {
     
 
     //6. obtener metricas de un repo
-    public Map<String, Object> obtenerMetricasRepositorio(String organizacion, String repo, List<String> usuarios, String accessToken, Boolean gestionProyecto){
+    public Map<String, Object> obtenerMetricasRepositorio(String organizacion, String repo, List<String> usuarios, String accessToken, Boolean gestionProyecto, String sinceDateIso ){
         String commitsBaseUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/commits";
         String pullsBaseUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/pulls";
     
@@ -297,12 +300,12 @@ public class GithubService {
         List<String> globalIssueDetails = new ArrayList<>();
 
         if(!gestionProyecto){
-            procesarCommitsYPRsGraphQL(organizacion, repo, accessToken, metricsMap);
+            procesarCommitsYPRsGraphQL(organizacion, repo, accessToken, metricsMap, sinceDateIso);
         }else{
             try{
                 // Obtener Issues y Métricas Globales
                 String issuesUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/issues?state=all&per_page=100";
-                Map<String, Object> repoGlobalMetrics = obtenerMetricasGlobalesIssues(issuesUrl, usuarios, metricsMap, entity);
+                Map<String, Object> repoGlobalMetrics = obtenerMetricasGlobalesIssues(issuesUrl, usuarios, metricsMap, entity, sinceDateIso);
 
                 // Agregar detalles de issues al listado global
                 globalIssueDetails.addAll((List<String>) repoGlobalMetrics.get("issueDetails"));
@@ -322,7 +325,7 @@ public class GithubService {
     }
 
     //obtener commits, lineaas y pull requests utilizando graphql
-    private void procesarCommitsYPRsGraphQL(String organizacion, String repo, String accessToken, Map<String, MetricasUsuarioDTO> metricsMap) {
+    private void procesarCommitsYPRsGraphQL(String organizacion, String repo, String accessToken, Map<String, MetricasUsuarioDTO> metricsMap, String sinceDateIso) {
         String graphqlUrl = "https://api.github.com/graphql";
 
         HttpHeaders headers = new HttpHeaders();
@@ -330,12 +333,12 @@ public class GithubService {
         headers.set("Content-Type", "application/json");
 
         String query = """
-        query($owner: String!, $repo: String!, $cursorCommits: String, $cursorPRs: String) {
+        query($owner: String!, $repo: String!, $cursorCommits: String, $cursorPRs: String, $sinceDate: GitTimestamp) {
           repository(owner: $owner, name: $repo) {
             defaultBranchRef {
               target {
                 ... on Commit {
-                  history(first: 100, after: $cursorCommits) {
+                  history(first: 100, after: $cursorCommits, since: $sinceDate) {
                     pageInfo { hasNextPage endCursor }
                     edges {
                       node {
@@ -349,11 +352,11 @@ public class GithubService {
             }
             pullRequests(first: 100, after: $cursorPRs) {
               pageInfo { hasNextPage endCursor }
-              nodes { author { login } }
+              nodes { author { login } createdAt }
             }
           }
         }
-    """;
+        """;
 
         boolean hasNextCommits = true;
         String cursorCommits = null;
@@ -367,6 +370,7 @@ public class GithubService {
                 variables.put("repo", repo);
                 variables.put("cursorCommits", cursorCommits);
                 variables.put("cursorPRs", cursorPRs);
+                variables.put("sinceDate", sinceDateIso);
 
                 Map<String, Object> payload = Map.of("query", query, "variables", variables);
                 HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload, headers);
@@ -413,6 +417,17 @@ public class GithubService {
                     JsonNode pullRequests = repositoryNode.path("pullRequests");
                     if (!pullRequests.isMissingNode()) {
                         for (JsonNode prNode : pullRequests.path("nodes")) {
+
+                            // Si hay fecha since, ignoramos las PRs más antiguas que esa fecha
+                            if (sinceDateIso != null) {
+                                String createdAtStr = prNode.path("createdAt").asText();
+                                Instant prDate = Instant.parse(createdAtStr);
+                                Instant sinceDate = Instant.parse(sinceDateIso);
+                                if (prDate.isBefore(sinceDate)) {
+                                    continue; // Saltamos esta PR porque es vieja
+                                }
+                            }
+
                             String author = prNode.path("author").path("login").asText(null);
                             if (author != null && metricsMap.containsKey(author)) {
                                 MetricasUsuarioDTO metrics = metricsMap.get(author);
@@ -435,7 +450,18 @@ public class GithubService {
     
 
     //7. get issues globales (gestion de proyecto)
-    public Map<String, Object> obtenerMetricasGlobalesIssues(String issuesUrl, List<String> usuarios, Map<String, MetricasUsuarioDTO> metricsMap, HttpEntity<?> entity) {
+    public Map<String, Object> obtenerMetricasGlobalesIssues(String issuesUrl, List<String> usuarios, Map<String, MetricasUsuarioDTO> metricsMap, HttpEntity<?> entity, String sinceDateIso) {
+
+        // Si tenemos fecha de última sincronización, la añadimos a la URL
+        if (sinceDateIso != null) {
+            // Comprobamos si la url ya tiene otros parámetros con '?'
+            if (issuesUrl.contains("?")) {
+                issuesUrl += "&since=" + sinceDateIso;
+            } else {
+                issuesUrl += "?since=" + sinceDateIso;
+            }
+        }
+
         List<String> issueDetails = new ArrayList<>();
     
         try {
@@ -497,6 +523,18 @@ public class GithubService {
     public void obtenerMetricasOrganizacion(String organizacion, List<String> usuarios, String accessToken, List<Integer> estudiantesIds, Boolean gestionProyecto, Integer equipoId) {
         List<String> repositorios = obtenerRepositorios(organizacion, accessToken);
 
+        Equipo equipo = equipoRepository.findById(equipoId)
+                .orElseThrow(() -> new RuntimeException("Equipo no encontrado"));
+
+        //Fecha para indicar cual fue la ultima vez que se actualizo los datos
+        String sinceDateIsoTemp = null;
+        if (equipo.getUltimaSincronizacionGit() != null) {
+            sinceDateIsoTemp = equipo.getUltimaSincronizacionGit()
+                    .atOffset(ZoneOffset.UTC)
+                    .format(DateTimeFormatter.ISO_INSTANT);
+        }
+        final String sinceDateIso = sinceDateIsoTemp;
+
         List<String> globalIssueDetails = new ArrayList<>();
         List<Estudiante> estudiantesList = estudianteRepository.findAllById(estudiantesIds);
         Map<String, Estudiante> usernameToEstudiante = estudiantesList.stream()
@@ -520,7 +558,7 @@ public class GithubService {
         // Ya no comprobamos si están vacíos previamente, ahorrando N peticiones HTTP.
         List<CompletableFuture<Map<String, Object>>> futures = repositorios.stream()
                 .map(repo -> CompletableFuture.supplyAsync(
-                        () -> obtenerMetricasRepositorio(organizacion, repo, usuarios, accessToken, gestionProyecto),
+                        () -> obtenerMetricasRepositorio(organizacion, repo, usuarios, accessToken, gestionProyecto, sinceDateIso),
                         customExecutor // Pasamos el pool de hilos optimizado
                 ))
                 .toList();
@@ -532,6 +570,7 @@ public class GithubService {
                 if (repoMetrics != null && !repoMetrics.isEmpty()) {
                     List<MetricasUsuarioDTO> userMetrics = (List<MetricasUsuarioDTO>) repoMetrics.get("userMetrics");
                     List<String> repoIssueDetails = (List<String>) repoMetrics.get("globalIssueDetails");
+
 
                     for (MetricasUsuarioDTO userMetric : userMetrics) {
                         MetricasUsuarioDTO aggregatedMetric = aggregatedMetrics.get(userMetric.getUsername());
@@ -547,32 +586,30 @@ public class GithubService {
                 System.err.println("Error procesando métricas de repositorio: " + e.getMessage());
             }
         }
-        Equipo equipo = equipoRepository.findById(equipoId)
-                .orElseThrow(() -> new RuntimeException("Equipo no encontrado"));
+
         List<MetricasEstudiante> metricasParaGuardar = new ArrayList<>();
 
         for (MetricasUsuarioDTO dto : aggregatedMetrics.values()) {
             Estudiante estudiante = usernameToEstudiante.get(dto.getUsername());
 
             if (estudiante != null) {
-                // Buscamos si ya existen métricas previas. Si no existen, creamos un objeto nuevo.
                 MetricasEstudiante metricas = metricasEstudianteRepository
                         .findByEstudianteIdAndEquipoId(estudiante.getId(), equipo.getId())
                         .orElse(new MetricasEstudiante());
 
-                // Asignamos las relaciones ManyToOne
                 metricas.setEstudiante(estudiante);
                 metricas.setEquipo(equipo);
 
-                // Actualizamos los valores numéricos
-                metricas.setTotalCommits(dto.getTotalCommits());
-                metricas.setLinesAdded(dto.getLinesAdded());
-                metricas.setLinesRemoved(dto.getLinesRemoved());
-                metricas.setPullRequestsMerged(dto.getPullRequestsMerged());
+                //Modificamos o Guardamos los valores
+                metricas.setTotalCommits( (metricas.getTotalCommits() == null ? 0 : metricas.getTotalCommits()) + dto.getTotalCommits() );
+                metricas.setLinesAdded( (metricas.getLinesAdded() == null ? 0 : metricas.getLinesAdded()) + dto.getLinesAdded() );
+                metricas.setLinesRemoved( (metricas.getLinesRemoved() == null ? 0 : metricas.getLinesRemoved()) + dto.getLinesRemoved() );
+                metricas.setPullRequestsMerged( (metricas.getPullRequestsMerged() == null ? 0 : metricas.getPullRequestsMerged()) + dto.getPullRequestsMerged() );
 
                 metricasParaGuardar.add(metricas);
             }
         }
+        System.out.println("Carga inicial completada: " + metricasParaGuardar.size() + " metricas guardadas.");
 
         metricasEstudianteRepository.saveAll(metricasParaGuardar);
 
@@ -585,6 +622,7 @@ public class GithubService {
 
     }
 
+    //Consultar la BD para obtener las metricas
     public Map<String, Object> consultarMetricasOrganizacion(Integer equipoId) {
         List<MetricasEstudiante> metricasBD = metricasEstudianteRepository.findByEquipoId(equipoId);
 
@@ -610,9 +648,9 @@ public class GithubService {
         return result;
     }
 
- 
 
-    
+
+
     //11-15 funciones datos usuario
 
     // 11. obtener el nombre de usuario de github

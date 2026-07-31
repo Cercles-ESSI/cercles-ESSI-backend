@@ -814,7 +814,6 @@ public class TaigaService {
 
                         if (!assignedNode.isMissingNode() && !assignedNode.isNull()) {
                             Integer taigaUserId = assignedNode.asInt();
-
                             estudianteResponsable = equipo.getEstudiantes().stream()
                                     .filter(e -> e.getTaigaId() != null && e.getTaigaId().equals(taigaUserId))
                                     .findFirst()

@@ -111,8 +111,8 @@ public class GitHubController {
     }
 
     @PreAuthorize("hasAuthority('PROFESOR')")
-    @GetMapping("/equipo/{idEquipo}/metrics/{organizacion}")
-    public ResponseEntity<?> obtenerMetricas(@PathVariable String organizacion, @RequestParam List<Integer> estudiantesIds, @PathVariable Integer idEquipo, @RequestParam Boolean isGithub) {
+    @GetMapping("/equipo/{idEquipo}/consultar-metrics")
+    public ResponseEntity<?> consultarMetricas(@PathVariable Integer idEquipo) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
@@ -129,6 +129,40 @@ public class GitHubController {
         }
     }
 
+    @PreAuthorize("hasAuthority('PROFESOR')")
+    @PostMapping("/equipo/{idEquipo}/metrics/{organizacion}")
+    public ResponseEntity<?> obtenerMetricas(@PathVariable String organizacion, @RequestParam List<Integer> estudiantesIds, @PathVariable Integer idEquipo, @RequestParam Boolean isGithub) {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(403).body(Map.of("error", "Usuario no autenticado"));
+            }
+
+            // Obtener usuarios GitHub de los estudiantes
+            List<String> usuarios = usuarioService.getAllUsuariosById(estudiantesIds);
+
+            String tokenGithub = equipoService.getTokenEquipo(idEquipo);
+
+            String tokenDescifrado = null;
+            try {
+                if (tokenGithub != null) {
+                    tokenDescifrado = tokenEncrypter.decrypt(tokenGithub);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Error al descifrar el token del curso.", e);
+            }
+            // Llamada al servicio con el token personal
+            githubService.obtenerMetricasOrganizacion(
+                    organizacion, usuarios, tokenDescifrado, estudiantesIds,isGithub,idEquipo
+            );
+
+            return ResponseEntity.ok(Map.of("success", true, "message", "Sincronización completada"));
+        } catch (Exception e) {
+            e.printStackTrace(); // Log completo del error
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
     
     @PostMapping("/callback")
     public ResponseEntity<?> handleGitHubCallback(@RequestBody Map<String, String> requestBody) {
