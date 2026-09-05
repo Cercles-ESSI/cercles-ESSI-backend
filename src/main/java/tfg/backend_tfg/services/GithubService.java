@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.Executor;
@@ -41,16 +42,11 @@ import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import tfg.backend_tfg.dto.IssueGithubDTO;
 import tfg.backend_tfg.dto.MetricasLineasUsuarioDTO;
 import tfg.backend_tfg.dto.MetricasUsuarioDTO;
-import tfg.backend_tfg.model.Equipo;
-import tfg.backend_tfg.model.Estudiante;
-import tfg.backend_tfg.model.MetricasEstudiante;
-import tfg.backend_tfg.model.Usuario;
-import tfg.backend_tfg.repository.EquipoRepository;
-import tfg.backend_tfg.repository.EstudianteRepository;
-import tfg.backend_tfg.repository.MetricasEstudianteRepository;
-import tfg.backend_tfg.repository.UsuarioRepository;
+import tfg.backend_tfg.model.*;
+import tfg.backend_tfg.repository.*;
 import tfg.backend_tfg.security.TokenEncrypter;
 
 @Service
@@ -73,6 +69,11 @@ public class GithubService {
     private EstudianteRepository estudianteRepository;
     @Autowired
     private MetricasEstudianteRepository metricasEstudianteRepository;
+    @Autowired
+    private TareasEquipoRepository tareasRepository;
+
+    @Autowired
+    private HistoriasUsuarioEquipoRepository historiasRepository;
 
     @Autowired
     private EquipoService equipoService;
@@ -299,13 +300,12 @@ public class GithubService {
     
         List<String> globalIssueDetails = new ArrayList<>();
 
-        if(!gestionProyecto){
-            procesarCommitsYPRsGraphQL(organizacion, repo, accessToken, metricsMap, sinceDateIso);
-        }else{
+        procesarCommitsYPRsGraphQL(organizacion, repo, accessToken, metricsMap, sinceDateIso);
+
+        if(gestionProyecto){
             try{
                 // Obtener Issues y Métricas Globales
-                String issuesUrl = "https://api.github.com/repos/" + organizacion + "/" + repo + "/issues?state=all&per_page=100";
-                Map<String, Object> repoGlobalMetrics = obtenerMetricasGlobalesIssues(issuesUrl, usuarios, metricsMap, entity, sinceDateIso);
+                Map<String, Object> repoGlobalMetrics = obtenerMetricasGlobalesIssues(organizacion, repo, metricsMap, accessToken, sinceDateIso);
 
                 // Agregar detalles de issues al listado global
                 globalIssueDetails.addAll((List<String>) repoGlobalMetrics.get("issueDetails"));
@@ -314,7 +314,6 @@ public class GithubService {
                 System.err.println("Error al obtener métricas del repositorio " + repo + ": " + e.getMessage());
             }
         }
-
 
         Map<String, Object> result = new HashMap<>();
 
@@ -450,71 +449,130 @@ public class GithubService {
     
 
     //7. get issues globales (gestion de proyecto)
-    public Map<String, Object> obtenerMetricasGlobalesIssues(String issuesUrl, List<String> usuarios, Map<String, MetricasUsuarioDTO> metricsMap, HttpEntity<?> entity, String sinceDateIso) {
+    public Map<String, Object> obtenerMetricasGlobalesIssues(String organizacion, String repo, Map<String, MetricasUsuarioDTO> metricsMap, String accessToken, String sinceDateIso) {
+        List<IssueGithubDTO> listaIssueDtos = new ArrayList<>();
+        String cursor = null;
+        boolean hasNextPage = true;
 
-        // Si tenemos fecha de última sincronización, la añadimos a la URL
-        if (sinceDateIso != null) {
-            // Comprobamos si la url ya tiene otros parámetros con '?'
-            if (issuesUrl.contains("?")) {
-                issuesUrl += "&since=" + sinceDateIso;
-            } else {
-                issuesUrl += "?since=" + sinceDateIso;
-            }
-        }
+        // 1. Construimos el filtro de fecha si existe
+        String sinceFilter = (sinceDateIso != null) ? ", filterBy: {since: \"" + sinceDateIso + "\"}" : "";
 
-        List<String> issueDetails = new ArrayList<>();
-    
-        try {
-            ResponseEntity<JsonNode> response = restTemplate.exchange(issuesUrl, HttpMethod.GET, entity, JsonNode.class);
-            JsonNode issues = response.getBody();
-    
-            for (JsonNode issue : issues) {
-                String number = issue.path("number").asText();
-                String title = issue.path("title").asText();
-                String state = issue.path("state").asText();
-                boolean isClosed = state.equals("closed");
-                String author = issue.path("user").path("login").asText();
-                List<String> assignees = new ArrayList<>();
-                issue.path("assignees").forEach(a -> assignees.add(a.path("login").asText()));
-                List<String> labels = new ArrayList<>();
-                issue.path("labels").forEach(label -> labels.add(label.path("name").asText()));
-    
-                boolean isUserStory = labels.contains("user story") || labels.contains("historia de usuario") || labels.contains("història d'usuari");
-                boolean isTask = labels.contains("task") || labels.contains("tarea") || labels.contains("tasca");
-    
-                if (isUserStory || isTask) {
-                    // Generar detalles para globalIssueDetails
-                    String labelType = isUserStory ? "user story" : "task";
-                    String issueDetail = "[" + number + "] " + title + ", Labels: " + labelType + ", Closed: " + isClosed + ", Created by: " + author + ", Assignees: " + assignees;
-                    issueDetails.add(issueDetail);
-    
-                    // Asignar métricas individuales si un usuario es asignado
-                    for (String assignee : assignees) {
-                        if (metricsMap.containsKey(assignee)) {
-                            MetricasUsuarioDTO metrics = metricsMap.get(assignee);
-                            if (isUserStory) {
-                                metrics.setUserStories(metrics.getUserStories() + 1);
-                                if (isClosed) {
-                                    metrics.setUserStoriesClosed(metrics.getUserStoriesClosed() + 1);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + accessToken);
+        headers.set("Content-Type", "application/json");
+
+        // 2. Definimos la query de GraphQL
+        String query = "query($owner: String!, $repo: String!, $cursor: String) { " +
+                "  repository(owner: $owner, name: $repo) { " +
+                "    issues(first: 100, after: $cursor" + sinceFilter + ") { " +
+                "      pageInfo { hasNextPage endCursor } " +
+                "      nodes { " +
+                "        number title state createdAt closedAt " +
+                "        author { login } " +
+                "        assignees(first: 10) { nodes { login } } " +
+                "        labels(first: 20) { nodes { name } } " +
+                "      } " +
+                "    } " +
+                "  } " +
+                "}";
+
+        String graphqlUrl = "https://api.github.com/graphql";
+
+        while (hasNextPage) {
+            // 3. Preparamos el Body de la petición
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("owner", organizacion);
+            variables.put("repo", repo);
+            variables.put("cursor", cursor);
+
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("query", query);
+            requestBody.put("variables", variables);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            try {
+                // 4. Hacemos la petición POST
+                ResponseEntity<JsonNode> response = restTemplate.exchange(graphqlUrl, HttpMethod.POST, entity, JsonNode.class);
+                JsonNode body = response.getBody();
+
+                // Comprobamos si hay errores de GraphQL
+                if (body != null && body.has("errors")) {
+                    System.err.println("Error de GraphQL: " + body.get("errors").toString());
+                    break;
+                }
+
+                // 5. Navegamos por el JSON de respuesta
+                JsonNode issuesConnection = body.path("data").path("repository").path("issues");
+                JsonNode issuesNodes = issuesConnection.path("nodes");
+
+                for (JsonNode issue : issuesNodes) {
+                    Integer number = issue.path("number").asInt();
+                    String title = issue.path("title").asText();
+
+                    String state = issue.path("state").asText();
+                    boolean isClosed = state.equalsIgnoreCase("CLOSED");
+
+                    LocalDateTime fechaCreacion = ZonedDateTime.parse(issue.path("createdAt").asText()).toLocalDateTime();
+                    LocalDateTime fechaCierre = issue.path("closedAt").isNull() ? null
+                            : ZonedDateTime.parse(issue.path("closedAt").asText()).toLocalDateTime();
+
+                    String author = issue.path("author").path("login").asText();
+
+                    List<String> assignees = new ArrayList<>();
+                    issue.path("assignees").path("nodes").forEach(a -> assignees.add(a.path("login").asText()));
+
+                    List<String> labels = new ArrayList<>();
+                    issue.path("labels").path("nodes").forEach(label -> labels.add(label.path("name").asText().toLowerCase()));
+
+                    boolean isUserStory = labels.contains("user story") || labels.contains("historia de usuario") || labels.contains("història d'usuari");
+                    boolean isTask = labels.contains("task") || labels.contains("tarea") || labels.contains("tasca");
+
+
+                    if (isUserStory || isTask) {
+                        String labelType = isUserStory ? "USER_STORY" : "TASK";
+                        IssueGithubDTO issueDto = new IssueGithubDTO();
+                        issueDto.setNumber(number);
+                        issueDto.setTitle(title);
+                        issueDto.setState(state);
+                        issueDto.setCreatedAt(fechaCreacion);
+                        issueDto.setClosedAt(fechaCierre);
+                        issueDto.setType(labelType);
+                        issueDto.setAssignees(assignees);
+
+                        listaIssueDtos.add(issueDto);
+
+                        for (String assignee : assignees) {
+                            if (metricsMap.containsKey(assignee)) {
+                                MetricasUsuarioDTO metrics = metricsMap.get(assignee);
+                                if (isUserStory) {
+                                    metrics.setUserStories(metrics.getUserStories() + 1);
+                                    if (isClosed) metrics.setUserStoriesClosed(metrics.getUserStoriesClosed() + 1);
                                 }
-                            }
-                            if (isTask) {
-                                metrics.setTasks(metrics.getTasks() + 1);
-                                if (isClosed) {
-                                    metrics.setTasksClosed(metrics.getTasksClosed() + 1);
+                                if (isTask) {
+                                    metrics.setTasks(metrics.getTasks() + 1);
+                                    if (isClosed) metrics.setTasksClosed(metrics.getTasksClosed() + 1);
                                 }
                             }
                         }
                     }
                 }
+
+                // 6. Actualizamos la paginación para el siguiente ciclo
+                JsonNode pageInfo = issuesConnection.path("pageInfo");
+                hasNextPage = pageInfo.path("hasNextPage").asBoolean();
+                if (hasNextPage) {
+                    cursor = pageInfo.path("endCursor").asText();
+                }
+
+            } catch (Exception e) {
+                System.err.println("Error al obtener issues con GraphQL: " + e.getMessage());
+                hasNextPage = false;
             }
-        } catch (Exception e) {
-            System.err.println("Error al obtener issues: " + e.getMessage());
         }
-    
+
         Map<String, Object> result = new HashMap<>();
-        result.put("issueDetails", issueDetails);
-    
+        result.put("issueDtos", listaIssueDtos);
         return result;
     }
     
@@ -535,7 +593,7 @@ public class GithubService {
         }
         final String sinceDateIso = sinceDateIsoTemp;
 
-        List<String> globalIssueDetails = new ArrayList<>();
+        List<IssueGithubDTO> globalIssuesRecopilados = new ArrayList<>();
         List<Estudiante> estudiantesList = estudianteRepository.findAllById(estudiantesIds);
         Map<String, Estudiante> usernameToEstudiante = estudiantesList.stream()
                 .collect(Collectors.toMap(
@@ -554,8 +612,7 @@ public class GithubService {
         int numberOfThreads = Math.min(repositorios.size(), 30);
         Executor customExecutor = Executors.newFixedThreadPool(Math.max(numberOfThreads, 1));
 
-        // 2. Procesar TODOS los repositorios en paralelo usando el customExecutor
-        // Ya no comprobamos si están vacíos previamente, ahorrando N peticiones HTTP.
+        // 2. Procesar todos los repositorios en paralelo usando el customExecutor
         List<CompletableFuture<Map<String, Object>>> futures = repositorios.stream()
                 .map(repo -> CompletableFuture.supplyAsync(
                         () -> obtenerMetricasRepositorio(organizacion, repo, usuarios, accessToken, gestionProyecto, sinceDateIso),
@@ -569,8 +626,7 @@ public class GithubService {
                 Map<String, Object> repoMetrics = future.join();
                 if (repoMetrics != null && !repoMetrics.isEmpty()) {
                     List<MetricasUsuarioDTO> userMetrics = (List<MetricasUsuarioDTO>) repoMetrics.get("userMetrics");
-                    List<String> repoIssueDetails = (List<String>) repoMetrics.get("globalIssueDetails");
-
+                    List<IssueGithubDTO> repoIssues = (List<IssueGithubDTO>) repoMetrics.get("issueDtos");
 
                     for (MetricasUsuarioDTO userMetric : userMetrics) {
                         MetricasUsuarioDTO aggregatedMetric = aggregatedMetrics.get(userMetric.getUsername());
@@ -578,15 +634,27 @@ public class GithubService {
                             aggregatedMetric.combine(userMetric);
                         }
                     }
-                    if (repoIssueDetails != null) {
-                        globalIssueDetails.addAll(repoIssueDetails);
+                    if (repoIssues != null) {
+                        globalIssuesRecopilados.addAll(repoIssues);
                     }
                 }
             } catch (Exception e) {
                 System.err.println("Error procesando métricas de repositorio: " + e.getMessage());
             }
         }
+        guardarMetricasBasicas(aggregatedMetrics, usernameToEstudiante, equipo);
 
+        if (Boolean.TRUE.equals(gestionProyecto)) {
+            guardarIssuesDeProyecto(globalIssuesRecopilados, usernameToEstudiante, equipo);
+        }
+
+        equipo.setUltimaSincronizacionGit(LocalDateTime.now());
+        equipoRepository.save(equipo);
+
+    }
+
+    //Funcion para guardar métricas de código (Commits, PRs, etc.)
+    private void guardarMetricasBasicas(Map<String, MetricasUsuarioDTO> aggregatedMetrics, Map<String, Estudiante> usernameToEstudiante, Equipo equipo) {
         List<MetricasEstudiante> metricasParaGuardar = new ArrayList<>();
 
         for (MetricasUsuarioDTO dto : aggregatedMetrics.values()) {
@@ -600,7 +668,6 @@ public class GithubService {
                 metricas.setEstudiante(estudiante);
                 metricas.setEquipo(equipo);
 
-                //Modificamos o Guardamos los valores
                 metricas.setTotalCommits( (metricas.getTotalCommits() == null ? 0 : metricas.getTotalCommits()) + dto.getTotalCommits() );
                 metricas.setLinesAdded( (metricas.getLinesAdded() == null ? 0 : metricas.getLinesAdded()) + dto.getLinesAdded() );
                 metricas.setLinesRemoved( (metricas.getLinesRemoved() == null ? 0 : metricas.getLinesRemoved()) + dto.getLinesRemoved() );
@@ -609,17 +676,58 @@ public class GithubService {
                 metricasParaGuardar.add(metricas);
             }
         }
+
         System.out.println("Carga inicial completada: " + metricasParaGuardar.size() + " metricas guardadas.");
-
         metricasEstudianteRepository.saveAll(metricasParaGuardar);
+    }
 
-        equipo.setUltimaSincronizacionGit(LocalDateTime.now());
-        equipoRepository.save(equipo);
+    //Funcion para guardar las métricas relacionadas con las issues
+    private void guardarIssuesDeProyecto(List<IssueGithubDTO> globalIssuesRecopilados, Map<String, Estudiante> usernameToEstudiante, Equipo equipo) {
+        for (IssueGithubDTO dto : globalIssuesRecopilados) {
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("userMetrics", new ArrayList<>(aggregatedMetrics.values()));
-        result.put("globalIssueDetails", globalIssueDetails);
+            Estudiante responsable = null;
 
+            if (dto.getAssignees() != null && !dto.getAssignees().isEmpty()) {
+                for (int i = dto.getAssignees().size() - 1; i >= 0; i--) {
+                    String login = dto.getAssignees().get(i);
+                    if (usernameToEstudiante.containsKey(login)) {
+                        responsable = usernameToEstudiante.get(login);
+                        break;
+                    }
+                }
+            }
+
+            String estadoTraducido = "CLOSED".equalsIgnoreCase(dto.getState()) ? "Cerrada" : "Abierta";
+
+            if ("USER_STORY".equals(dto.getType())) {
+                HistoriasUsuarioEquipo historia = historiasRepository
+                        .findByIdHistoriaAndEquipoId(dto.getNumber(), equipo.getId())
+                        .orElse(new HistoriasUsuarioEquipo());
+
+                historia.setIdHistoria(dto.getNumber());
+                historia.setTitulo(dto.getTitle());
+                historia.setEstado(estadoTraducido);
+                historia.setEquipo(equipo);
+                historia.setResponsable(responsable);
+
+                historiasRepository.save(historia);
+
+            } else if ("TASK".equals(dto.getType())) {
+                TareasEquipo tarea = tareasRepository
+                        .findByIdTareaAndEquipoId(dto.getNumber(), equipo.getId())
+                        .orElse(new TareasEquipo());
+
+                tarea.setIdTarea(dto.getNumber());
+                tarea.setTitulo(dto.getTitle());
+                tarea.setEstado(estadoTraducido);
+                tarea.setEquipo(equipo);
+                tarea.setEstudiante(responsable);
+                tarea.setFechaCreacion(dto.getCreatedAt());
+                tarea.setFechaCierre(dto.getClosedAt());
+
+                tareasRepository.save(tarea);
+            }
+        }
     }
 
     //Consultar la BD para obtener las metricas

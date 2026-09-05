@@ -6,7 +6,14 @@ import lombok.experimental.SuperBuilder;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "tareas_equipo")
+@Table(name = "tareas_equipo",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_tarea_equipo", //
+                        columnNames = {"id_tarea", "equipo_id"}
+                )
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -14,8 +21,12 @@ import java.time.LocalDateTime;
 public class TareasEquipo {
 
     @Id
-    @Column(name = "id_tarea")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
     private Integer id;
+
+    @Column(name = "id_tarea")
+    private Integer idTarea;
 
     @Column(nullable = false)
     private String titulo;

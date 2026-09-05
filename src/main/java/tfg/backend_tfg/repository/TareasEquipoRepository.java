@@ -6,10 +6,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import tfg.backend_tfg.model.Equipo;
+import tfg.backend_tfg.model.HistoriasUsuarioEquipo;
 import tfg.backend_tfg.model.TareasEquipo;
 import tfg.backend_tfg.model.Evaluacion;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface TareasEquipoRepository extends JpaRepository<TareasEquipo, Integer> {
@@ -38,4 +41,8 @@ public interface TareasEquipoRepository extends JpaRepository<TareasEquipo, Inte
             @Param("fechaFin") LocalDateTime fechaFin
     );
     List<TareasEquipo> findByEquipoIdAndEvaluacionId(Integer equipoId, Integer evaluacionId);
+
+    Optional<TareasEquipo> findByIdTareaAndEquipoId(
+            Integer idTarea, Integer equipoId
+    );
 }

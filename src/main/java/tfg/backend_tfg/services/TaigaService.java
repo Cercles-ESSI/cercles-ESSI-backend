@@ -47,8 +47,6 @@ public class TaigaService {
         this.restTemplate = new RestTemplate();
     }
 
-    private static final Logger logger = LoggerFactory.getLogger(TaigaService.class);
-
     //1. validar la org de un equipo
     public Map<String, Boolean> validarProyecto(Integer profesorId, List<Integer> miembrosIds, String profesorTaiga, String proyectoUrl) {
 
@@ -270,7 +268,7 @@ public class TaigaService {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode usersArray = response.getBody();
 
-                System.out.println("--- TAIGA DEBUG: JSON recibido: " + usersArray.toString());
+                //System.out.println("--- TAIGA DEBUG: JSON recibido: " + usersArray.toString());
                 if (usersArray.isArray()) {
                     for (JsonNode userNode : usersArray) {
                         if (userNode.path("username").asText().equals(username)) {
@@ -325,7 +323,7 @@ public class TaigaService {
                         }
 
                         HistoriasUsuarioEquipo historia = HistoriasUsuarioEquipo.builder()
-                                .id(storyNode.path("id").asInt())
+                                .idHistoria(storyNode.path("id").asInt())
                                 .titulo(storyNode.path("subject").asText())
                                 .estado(storyNode.path("status_extra_info").path("name").asText("New"))
                                 .sprint(nombreSprint)
@@ -397,12 +395,16 @@ public class TaigaService {
                         JsonNode userStoryNode = taskNode.path("user_story");
                         if (!userStoryNode.isMissingNode() && !userStoryNode.isNull()) {
                             Integer idHistoriaTaiga = userStoryNode.asInt();
-                            historiaVinculada = historiasRepository.findById(idHistoriaTaiga).orElse(null);
+
+                            historiaVinculada = historiasRepository.findByIdHistoriaAndEquipoId(
+                                    idHistoriaTaiga,
+                                    equipo.getId()
+                            ).orElse(null);
                         }
                         // ---------------------------------------------
 
                         TareasEquipo tarea = TareasEquipo.builder()
-                                .id(taskNode.path("id").asInt())
+                                .idTarea(taskNode.path("id").asInt())
                                 .titulo(taskNode.path("subject").asText())
                                 .estado(taskNode.path("status_extra_info").path("name").asText("New"))
                                 .equipo(equipo)
@@ -462,7 +464,7 @@ public class TaigaService {
                     // b) Ignoramos las tareas huérfanas (que no tienen historia asignada)
                     .filter(tarea -> tarea.getHistoriaUsuario() != null)
                     // d) Extraemos únicamente el ID de la historia de esas tareas
-                    .map(tarea -> tarea.getHistoriaUsuario().getId())
+                    .map(tarea -> tarea.getHistoriaUsuario().getIdHistoria())
                     // e) Filtramos para que no haya IDs repetidos
                     .distinct()
                     // f) Contamos cuántas historias únicas quedaron
@@ -580,11 +582,9 @@ public class TaigaService {
 
     public List<HistoriaDetalleDTO> obtenerDetallestaiga(Integer equipoId, String tipoFiltro, Integer evaluacionId) {
 
-// 1. Buscamos el equipo en la base de datos
         Equipo equipo = equipoRepository.findById(equipoId)
                 .orElseThrow(() -> new RuntimeException("Equipo no encontrado con ID: " + equipoId));
 
-        // 2. Traemos TODAS las historias del equipo
         List<HistoriasUsuarioEquipo> historiasDelEquipo = historiasRepository.findByEquipo_Id(equipoId);
 
 
@@ -603,7 +603,7 @@ public class TaigaService {
 
         for (HistoriasUsuarioEquipo historia : historiasDelEquipo) {
             HistoriaDetalleDTO dto = new HistoriaDetalleDTO();
-            dto.setId(historia.getId());
+            dto.setId(historia.getIdHistoria());
             dto.setTitulo(historia.getTitulo());
             dto.setEstado(historia.getEstado());
             dto.setSprint(historia.getSprint());
@@ -611,7 +611,7 @@ public class TaigaService {
 
             // Filtrar tareas de esta historia (usando la lista ya filtrada por sprint o global)
             List<TareasEquipo> tareasDeEstaHistoria = tareasDelEquipo.stream()
-                    .filter(tarea -> tarea.getHistoriaUsuario() != null && tarea.getHistoriaUsuario().getId().equals(historia.getId()))
+                    .filter(tarea -> tarea.getHistoriaUsuario() != null && tarea.getHistoriaUsuario().getIdHistoria().equals(historia.getIdHistoria()))
                     .collect(Collectors.toList());
 
             dto.setTotalTareas(tareasDeEstaHistoria.size());
@@ -734,16 +734,16 @@ public class TaigaService {
                         JsonNode userStoryNode = taskNode.path("user_story");
                         if (!userStoryNode.isMissingNode() && !userStoryNode.isNull()) {
                             Integer idHistoriaTaiga = userStoryNode.asInt();
-                            historiaVinculada = historiasRepository.findById(idHistoriaTaiga).orElse(null);
+                            historiaVinculada = historiasRepository.findByIdHistoriaAndEquipoId(idHistoriaTaiga,equipoId).orElse(null);
                         }
 
                         // Buscar la tarea en BD o crear una nueva si no existe
                         Integer taskId = taskNode.path("id").asInt();
-                        TareasEquipo tarea = tareasRepository.findById(taskId)
+                        TareasEquipo tarea = tareasRepository.findByIdTareaAndEquipoId(taskId,equipoId)
                                 .orElse(new TareasEquipo());
 
                         // Usar setters en lugar del builder
-                        tarea.setId(taskId);
+                        tarea.setIdTarea(taskId);
                         tarea.setTitulo(taskNode.path("subject").asText());
                         tarea.setEstado(taskNode.path("status_extra_info").path("name").asText("New"));
                         tarea.setEquipo(equipo);
@@ -822,11 +822,11 @@ public class TaigaService {
 
                         Integer storyId = storyNode.path("id").asInt();
 
-                        HistoriasUsuarioEquipo historia = historiasRepository.findById(storyId)
+                        HistoriasUsuarioEquipo historia = historiasRepository.findByIdHistoriaAndEquipoId(storyId,equipoId)
                                 .orElse(new HistoriasUsuarioEquipo());
 
                         // 2. Actualizar los campos mediante setters
-                        historia.setId(storyId);
+                        historia.setIdHistoria(storyId);
                         historia.setTitulo(storyNode.path("subject").asText());
                         historia.setEstado(storyNode.path("status_extra_info").path("name").asText("New"));
                         historia.setSprint(nombreSprint);

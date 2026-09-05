@@ -12,12 +12,24 @@ import java.util.List;
 @Data
 @SuperBuilder
 @NoArgsConstructor
-@Table(name = "historias_equipo")
+@Table(
+        name = "historias_equipo",
+        uniqueConstraints = {
+            @UniqueConstraint(
+            name = "uk_historia_equipo",
+            columnNames = {"id_hisdtoria", "equipo_id"}
+            )
+        }
+)
 
 public class HistoriasUsuarioEquipo {
     @Id
-    @Column(name = "id_historia")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
     private Integer id;
+
+    @Column(name = "id_historia")
+    private Integer idHistoria;
 
     @Column(nullable = false)
     private String titulo;
@@ -28,7 +40,7 @@ public class HistoriasUsuarioEquipo {
     @Column
     private String sprint;
 
-    @Column(nullable = false)
+    @Column
     private Integer puntosEsfuerzo;
 
     @ManyToOne(fetch = FetchType.LAZY)
