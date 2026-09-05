@@ -177,26 +177,6 @@ public class TaigaService {
         // Extraemos el ID del proyecto de Taiga
         Integer taigaProjectId = proyectoJson.path("id").asInt();
 
-        // 3. Extraemos el mapa de usuarios (username -> id)
-        Map<String, Integer> idsTaiga = new HashMap<>();
-        JsonNode membersNode = proyectoJson.path("members");
-        if (membersNode.isArray()) {
-            for (JsonNode member : membersNode) {
-                idsTaiga.put(member.path("username").asText(), member.path("id").asInt());
-            }
-        }
-
-        // 4. ---Actualizar IDs nulos de Taiga de cada usuario del equipo ---
-        for (Usuario alumno : equipo.getEstudiantes()) {
-            if (alumno.getTaigaId() == null) {
-                Integer idTaiga = idsTaiga.get(alumno.getTaigaUsername());
-                if (idTaiga != null) {
-                    alumno.setTaigaId(idTaiga);
-                    usuarioRepository.save(alumno); // Lo guardamos con su ID definitivo
-                }
-            }
-        }
-
         if (taigaProjectId == null) {
             throw new IllegalStateException("No se pudo obtener el ID del proyecto en Taiga para el identificador: " + proyecto);
         }
@@ -205,6 +185,7 @@ public class TaigaService {
         equipo.setTaigaProyecto(proyecto);
         equipo = equipoRepository.save(equipo);
 
+        obtenerIdUser(equipo);
         cargarHistorias(equipo, equipo.getTaigaProyectoId());
         cargarTareasIniciales(equipo, equipo.getTaigaProyectoId());
     }
@@ -251,36 +232,51 @@ public class TaigaService {
     }
 
     //6. Obtener ID del Taiga user
-    public Integer obtenerIdUser(String username) {
-        String url = String.format("%susers?username=%s", taigaApiBaseUrl, username);
+    public void obtenerIdUser(Equipo equipo) {
+        if (equipo.getTaigaProyecto() == null && equipo.getTaigaProyectoId() == null) {
+            return;
+        }
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Content-Type", "application/json");
-        headers.set("x-disable-pagination", "true");
+        boolean necesitaActualizar = equipo.getEstudiantes().stream()
+                .anyMatch(alumno -> alumno.getTaigaId() == null);
 
-        HttpEntity<String> entity = new HttpEntity<>(headers);
+        if (!necesitaActualizar) {
+            return; // Todos tienen ID, nos ahorramos la llamada a la API
+        }
+
+        // 3. Llamamos a Taiga para traernos los miembros del proyecto
+        String url = String.format("%sprojects/by_slug?slug=%s", taigaApiBaseUrl, equipo.getTaigaProyecto());
 
         try {
-            ResponseEntity<JsonNode> response = restTemplate.exchange(
-                    url, HttpMethod.GET, entity, JsonNode.class
-            );
+            ResponseEntity<JsonNode> response = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), JsonNode.class);
+            JsonNode proyectoJson = response.getBody();
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode usersArray = response.getBody();
+            if (proyectoJson != null && proyectoJson.has("members")) {
+                // Extraemos el mapa de usuarios
+                Map<String, Integer> idsTaiga = new HashMap<>();
+                for (JsonNode member : proyectoJson.path("members")) {
+                    idsTaiga.put(member.path("username").asText(), member.path("id").asInt());
+                }
 
-                //System.out.println("--- TAIGA DEBUG: JSON recibido: " + usersArray.toString());
-                if (usersArray.isArray()) {
-                    for (JsonNode userNode : usersArray) {
-                        if (userNode.path("username").asText().equals(username)) {
-                            return userNode.path("id").asInt();
+                // Actualizamos los alumnos que no tengan ID
+                boolean huboCambios = false;
+                for (Usuario alumno : equipo.getEstudiantes()) {
+                    if (alumno.getTaigaId() == null) {
+                        Integer idTaiga = idsTaiga.get(alumno.getTaigaUsername());
+                        if (idTaiga != null) {
+                            alumno.setTaigaId(idTaiga);
+                            usuarioRepository.save(alumno);
+                            huboCambios = true;
                         }
                     }
                 }
+                if (huboCambios) {
+                    System.out.println("Se han auto-completado IDs de Taiga faltantes para el equipo " + equipo.getId());
+                }
             }
         } catch (Exception e) {
-            System.err.println("Error al conectar con Taiga: " + e.getMessage());
+            System.err.println("Aviso: No se pudieron sincronizar los IDs de Taiga en background: " + e.getMessage());
         }
-        return null;
     }
 
     //7. Caragamos por primera vez las historias del equipo
@@ -674,6 +670,8 @@ public class TaigaService {
         Equipo equipo = equipoRepository.findById(equipoId)
                 .orElseThrow(() -> new RuntimeException("Equipo no encontrado"));
 
+        obtenerIdUser(equipo);
+
         // 2. Obtener el ID numérico del proyecto en Taiga.
         Integer taigaProjectId = equipo.getTaigaProyectoId();
 
@@ -772,6 +770,8 @@ public class TaigaService {
         // 1. Validar que el equipo existe
         Equipo equipo = equipoRepository.findById(equipoId)
                 .orElseThrow(() -> new RuntimeException("Equipo no encontrado"));
+
+        obtenerIdUser(equipo);
 
         // 2. Obtener el ID numérico del proyecto en Taiga.
         Integer taigaProjectId =equipo.getTaigaProyectoId();

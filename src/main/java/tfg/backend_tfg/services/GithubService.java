@@ -297,8 +297,8 @@ public class GithubService {
         for (String usuario : usuarios) {
             metricsMap.put(usuario, new MetricasUsuarioDTO(usuario));
         }
-    
-        List<String> globalIssueDetails = new ArrayList<>();
+
+        List<IssueGithubDTO> globalIssueDetails = new ArrayList<>();
 
         procesarCommitsYPRsGraphQL(organizacion, repo, accessToken, metricsMap, sinceDateIso);
 
@@ -307,8 +307,17 @@ public class GithubService {
                 // Obtener Issues y Métricas Globales
                 Map<String, Object> repoGlobalMetrics = obtenerMetricasGlobalesIssues(organizacion, repo, metricsMap, accessToken, sinceDateIso);
 
-                // Agregar detalles de issues al listado global
-                globalIssueDetails.addAll((List<String>) repoGlobalMetrics.get("issueDetails"));
+                //Sacamos la lista usando la nueva clave "issueDtos" y casteamos a IssueGithubDTO
+                List<IssueGithubDTO> repoIssues = (List<IssueGithubDTO>) repoGlobalMetrics.get("issueDtos");
+
+                if (repoIssues != null) {
+                    // Agregar detalles de issues al listado global
+                    globalIssueDetails.addAll(repoIssues);
+                    System.out.println("Se han encontrado " + repoIssues.size() + " issues en el repositorio: " + repo);
+                    for (IssueGithubDTO issue : repoIssues) {
+                        System.out.println(" -> " + issue);
+                    }
+                }
 
             } catch (Exception e) {
                 System.err.println("Error al obtener métricas del repositorio " + repo + ": " + e.getMessage());
@@ -626,7 +635,7 @@ public class GithubService {
                 Map<String, Object> repoMetrics = future.join();
                 if (repoMetrics != null && !repoMetrics.isEmpty()) {
                     List<MetricasUsuarioDTO> userMetrics = (List<MetricasUsuarioDTO>) repoMetrics.get("userMetrics");
-                    List<IssueGithubDTO> repoIssues = (List<IssueGithubDTO>) repoMetrics.get("issueDtos");
+                    List<IssueGithubDTO> repoIssues = (List<IssueGithubDTO>) repoMetrics.get("globalIssueDetails");
 
                     for (MetricasUsuarioDTO userMetric : userMetrics) {
                         MetricasUsuarioDTO aggregatedMetric = aggregatedMetrics.get(userMetric.getUsername());
@@ -644,7 +653,7 @@ public class GithubService {
         }
         guardarMetricasBasicas(aggregatedMetrics, usernameToEstudiante, equipo);
 
-        if (Boolean.TRUE.equals(gestionProyecto)) {
+        if (gestionProyecto) {
             guardarIssuesDeProyecto(globalIssuesRecopilados, usernameToEstudiante, equipo);
         }
 
@@ -728,6 +737,7 @@ public class GithubService {
                 tareasRepository.save(tarea);
             }
         }
+        System.out.println("Ha entrado a issues");
     }
 
     //Consultar la BD para obtener las metricas
@@ -756,7 +766,88 @@ public class GithubService {
         return result;
     }
 
+    //Consultar la BD para obtener metricas de gestion de proyecto
+    public Map<String, Object> consultarMetricasProyectoGithub(Integer equipoId) {
+        Equipo equipo = equipoRepository.findById(equipoId)
+                .orElseThrow(() -> new RuntimeException("Equipo no encontrado"));
 
+        List<MetricasUsuarioDTO> userMetrics = new ArrayList<>();
+        Map<String, MetricasUsuarioDTO> mapMetrics = new HashMap<>();
+
+        for (Estudiante estudiante : equipo.getEstudiantes()) {
+            MetricasUsuarioDTO dto = new MetricasUsuarioDTO(estudiante.getNombre(), estudiante.getGitUsername());
+            dto.setUserStories(0);
+            dto.setUserStoriesClosed(0);
+            dto.setTasks(0);
+            dto.setTasksClosed(0);
+
+            mapMetrics.put(estudiante.getGitUsername(), dto);
+            userMetrics.add(dto);
+        }
+
+        List<IssueGithubDTO> globalIssueDetails = new ArrayList<>();
+
+        List<HistoriasUsuarioEquipo> historiasDelEquipo = historiasRepository.findByEquipo_Id(equipoId);
+        List<TareasEquipo> tareasDelEquipo = tareasRepository.findByEquipoId(equipoId);
+
+        // --- Procesamos Historias ---
+        for (HistoriasUsuarioEquipo historia : historiasDelEquipo) {
+            IssueGithubDTO detalle = new IssueGithubDTO();
+            detalle.setType("USER_STORY");
+            detalle.setNumber(historia.getIdHistoria());
+            detalle.setTitle(historia.getTitulo());
+            detalle.setState(historia.getEstado());
+
+            boolean isClosed = "Cerrada".equalsIgnoreCase(historia.getEstado());
+
+            List<String> assignees = new ArrayList<>();
+            if (historia.getResponsable() != null) {
+                String username = historia.getResponsable().getGitUsername();
+                assignees.add(username);
+
+                if (mapMetrics.containsKey(username)) {
+                    MetricasUsuarioDTO dto = mapMetrics.get(username);
+                    dto.setUserStories(dto.getUserStories() + 1);
+                    if (isClosed) dto.setUserStoriesClosed(dto.getUserStoriesClosed() + 1);
+                }
+            }
+            detalle.setAssignees(assignees);
+            globalIssueDetails.add(detalle);
+        }
+
+        // --- Procesamos Tareas ---
+        for (TareasEquipo tarea : tareasDelEquipo) {
+            IssueGithubDTO detalle = new IssueGithubDTO();
+            detalle.setType("TASK");
+            detalle.setNumber(tarea.getIdTarea());
+            detalle.setTitle(tarea.getTitulo());
+            detalle.setState(tarea.getEstado());
+            detalle.setCreatedAt(tarea.getFechaCreacion()); // Si la tienes
+            detalle.setClosedAt(tarea.getFechaCierre());   // Si la tienes
+
+            boolean isClosed = "Cerrada".equalsIgnoreCase(tarea.getEstado());
+
+            List<String> assignees = new ArrayList<>();
+            if (tarea.getEstudiante() != null) {
+                String username = tarea.getEstudiante().getGitUsername();
+                assignees.add(username);
+
+                if (mapMetrics.containsKey(username)) {
+                    MetricasUsuarioDTO dto = mapMetrics.get(username);
+                    dto.setTasks(dto.getTasks() + 1);
+                    if (isClosed) dto.setTasksClosed(dto.getTasksClosed() + 1);
+                }
+            }
+            detalle.setAssignees(assignees);
+            globalIssueDetails.add(detalle);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("userMetrics", userMetrics);
+        result.put("globalIssueDetails", globalIssueDetails);
+
+        return result;
+    }
 
 
     //11-15 funciones datos usuario

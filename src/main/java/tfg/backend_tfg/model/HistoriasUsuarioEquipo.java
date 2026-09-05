@@ -17,7 +17,7 @@ import java.util.List;
         uniqueConstraints = {
             @UniqueConstraint(
             name = "uk_historia_equipo",
-            columnNames = {"id_hisdtoria", "equipo_id"}
+            columnNames = {"id_historia", "equipo_id"}
             )
         }
 )
