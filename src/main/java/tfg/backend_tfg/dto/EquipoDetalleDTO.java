@@ -1,7 +1,15 @@
 package tfg.backend_tfg.dto;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
 import java.util.List;
 
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class EquipoDetalleDTO {
     private int id;
     private String nombre;
@@ -28,17 +36,21 @@ public class EquipoDetalleDTO {
 
     //Información de github
     private String gitOrganizacion;
+    private LocalDateTime ultimaSincronizacionGit;
 
     // Información de Taiga
     private String taigaProyecto;
+    private LocalDateTime ultimaSincronizacionTareas;
+    private LocalDateTime ultimaSincronizacionHistorias;
 
 
 
+/*
     // Constructor completo
     public EquipoDetalleDTO(int id, String nombre, int cursoId, String nombreAsignatura,
                                     int añoInicio, int cuatrimestre, boolean activo, String githubAsignatura, String tokenGithub,String gestionTareas,
                                     int evaluadorId, String evaluadorNombre, String evaluadorCorreo, String taigaUserProf,
-                                    List<EstudianteDTO> estudiantes, String gitOrganizacion, String taigaProyecto) {
+                                    List<EstudianteDTO> estudiantes, String gitOrganizacion, String taigaProyecto, LocalDateTime ultimaSincronizacionGit,LocalDateTime ultimaSincronizacionTareas, LocalDateTime ultimaSincronizacionHistorias) {
         this.id = id;
         this.nombre = nombre;
         this.cursoId = cursoId;
@@ -194,5 +206,5 @@ public class EquipoDetalleDTO {
     public void setTaigaProyecto(String taigaProyecto) {
         this.taigaProyecto = taigaProyecto;
     }
-
+*/
 }

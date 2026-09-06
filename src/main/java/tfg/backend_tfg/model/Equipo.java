@@ -47,9 +47,14 @@ public class Equipo {
             inverseJoinColumns = @JoinColumn(name = "id_estudiante") // La columna que apunta a la id de Estudiante
     )
     private List<Estudiante> estudiantes;
+    @OneToMany(mappedBy = "equipo", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<MetricasEstudiante> metricasEstudiantes;
 
     @OneToMany(mappedBy = "equipo", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<HistoriasUsuarioEquipo> historiasEquipo;
+
+    @OneToMany(mappedBy = "equipo", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TareasEquipo> tareas;
 
     @OneToMany(mappedBy = "equipo", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private List<EvaluacionDetalle> evaluacionesDetalle;

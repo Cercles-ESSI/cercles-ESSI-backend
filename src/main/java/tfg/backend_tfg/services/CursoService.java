@@ -385,22 +385,32 @@ public class CursoService {
 
         // Equipos con miembros
         List<EquipoDTO> equiposConMiembros = equipoRepository.findByCursoId(cursoId).stream()
-        .map(equipo -> new EquipoDTO(
-                equipo.getNombre(),
-                equipo.getId(),
-                equipo.getEvaluador() != null ? equipo.getEvaluador().getId() : null,
-                equipo.getGitOrganizacion() != null,
-                estudianteEquipoRepository.findByEquipoId(equipo.getId()).stream()
-                        .collect(Collectors.toMap(
-                                estudianteEquipo -> estudianteEquipo.getEstudiante().getNombre(),
-                                estudianteEquipo -> estudiantesCurso.stream()
-                                        .filter(ec -> ec.getEstudiante().getId() == estudianteEquipo.getEstudiante().getId())
-                                        .findFirst()
-                                        .map(EstudianteCurso::getGrupo)
-                                        .orElse("N/A")
-                        ))
-        ))
-        .toList();
+                .map(equipo -> {
+                    Map<String, String> miembros = estudianteEquipoRepository.findByEquipoId(equipo.getId()).stream()
+                            .collect(Collectors.toMap(
+                                    estudianteEquipo -> estudianteEquipo.getEstudiante().getNombre(),
+                                    estudianteEquipo -> estudiantesCurso.stream()
+                                            .filter(ec -> ec.getEstudiante().getId() == estudianteEquipo.getEstudiante().getId())
+                                            .findFirst()
+                                            .map(EstudianteCurso::getGrupo)
+                                            .orElse("N/A")
+                            ));
+                    Map<String, String> correos = estudianteEquipoRepository.findByEquipoId(equipo.getId()).stream()
+                            .collect(Collectors.toMap(
+                                    estudianteEquipo -> estudianteEquipo.getEstudiante().getNombre(),
+                                    estudianteEquipo -> estudianteEquipo.getEstudiante().getCorreo()
+                            ));
+
+                    return new EquipoDTO(
+                            equipo.getNombre(),
+                            equipo.getId(),
+                            equipo.getEvaluador() != null ? equipo.getEvaluador().getId() : null,
+                            equipo.getGitOrganizacion() != null,
+                            miembros,
+                            correos
+                    );
+                })
+                .toList();
 
 
         // Nombres de los profesores

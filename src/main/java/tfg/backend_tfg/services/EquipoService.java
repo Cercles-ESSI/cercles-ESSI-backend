@@ -191,7 +191,10 @@ public class EquipoService {
                 taigaUserProf,
                 estudiantes,
                 gitOrganizacion,
-                taigaProyecto
+                equipo.getUltimaSincronizacionGit(),
+                taigaProyecto,
+                equipo.getUltimaSincronizacionTareas(),
+                equipo.getUltimaSincronizacionHistorias()
         );
     }
 
