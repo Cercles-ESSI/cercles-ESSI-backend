@@ -38,6 +38,9 @@ public class Curso {
     @Column(name = "gestion_tareas", nullable = false)
     private String gestionTareas;
 
+    @Column(name = "link_taiga")
+    private String linkTaiga;
+
     // Relación con profesores a través de ProfesorCurso
     @OneToMany(mappedBy = "curso", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProfesorCurso> profesores;

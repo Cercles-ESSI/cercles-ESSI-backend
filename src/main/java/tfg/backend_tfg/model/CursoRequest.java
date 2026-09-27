@@ -11,6 +11,7 @@ public class CursoRequest {
     private String githubAsignatura;
     private String tokenGithubAsignatura;
     private String gestionTareas;
+    private String linkTaiga;
     private List<EstudianteRequest> estudiantes;
     private List<ProfesorRequest> profesores;
 
@@ -82,6 +83,11 @@ public class CursoRequest {
     public void setTokenGithubAsignatura(String tokenGithubAsignatura) {
         this.tokenGithubAsignatura = tokenGithubAsignatura;
     }
+
+    public void setLinkTaiga(String linkTaiga){
+        this.linkTaiga = linkTaiga;
+    }
+    public String getLinkTaiga(){return linkTaiga;}
 
     public List<EstudianteRequest> getEstudiantes() {
         return estudiantes;

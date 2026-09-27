@@ -196,6 +196,7 @@ public class CursoService {
                     .githubAsignatura(cursoRequest.getGithubAsignatura())
                     .tokenGithubAsignatura(encryptedToken)
                     .gestionTareas(cursoRequest.getGestionTareas())
+                    .linkTaiga(cursoRequest.getLinkTaiga())
                     .build();
 
             curso = cursoRepository.save(curso);

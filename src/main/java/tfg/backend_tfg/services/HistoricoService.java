@@ -69,8 +69,8 @@ public class HistoricoService {
 
                 try {
                     // 3. Sincronizamos primero Taiga para tener los datos actualizados de última hora
-                    taigaService.sincronizarTareas(equipo.getId());
-                    taigaService.sincronizarHistorias(equipo.getId());
+                    taigaService.sincronizarTareas(equipo.getId(),false);
+                    taigaService.sincronizarHistorias(equipo.getId(),false);
 
                     // 4. Llamamos a funciones estadísticas de Taiga
                    TareasEquipoDTO estadisticasTaiga = taigaService.calcularEstadisticasEquipoTareas(equipo.getId(), equipo.getTaigaProyecto(), "hola", 11);

@@ -28,8 +28,6 @@ import java.util.stream.Collectors;
 @Service
 public class TaigaService {
 
-    @Value("${taiga.api.url}")
-    private String taigaApiBaseUrl;
     private final RestTemplate restTemplate;
 
     @Autowired
@@ -47,8 +45,20 @@ public class TaigaService {
         this.restTemplate = new RestTemplate();
     }
 
+    private String obtenerUrlBaseTaiga(Equipo equipo) {
+        String url = equipo.getCurso().getLinkTaiga();
+        if (url == null || url.isEmpty()) {
+            throw new RuntimeException("El curso asociado no tiene configurada la URL de Taiga.");
+        }
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+
+        return url + "/api/v1/";
+    }
+
     //1. validar la org de un equipo
-    public Map<String, Boolean> validarProyecto(Integer profesorId, List<Integer> miembrosIds, String profesorTaiga, String proyectoUrl) {
+    public Map<String, Boolean> validarProyecto(Integer profesorId, List<Integer> miembrosIds, Integer equipoId, String proyectoUrl) {
 
         String prefijoProyecto = "project/";
 
@@ -79,8 +89,12 @@ public class TaigaService {
         resultadoValidacion.put("profesorTaigaConfigurado", profesorTaigaUsername != null);
 
         try {
+            Equipo equipo = equipoRepository.findById(equipoId)
+                    .orElseThrow(() -> new RuntimeException("Equipo no encontrado con ID: " + equipoId));
+
+            String taigaApiBaseUrl = obtenerUrlBaseTaiga(equipo);
             // Verificar si el proyecto es privado. Si no es: professor y los alumnos son miembros del proyecto
-            Map<String, Boolean> resultadosTaiga = verificarMiembros(proyecto, profesorTaigaUsername,miembrosTaigaUsernames);
+            Map<String, Boolean> resultadosTaiga = verificarMiembros(proyecto, profesorTaigaUsername,miembrosTaigaUsernames,taigaApiBaseUrl);
             resultadoValidacion.put("proyectoPublico", resultadosTaiga.getOrDefault("proyectoPublico", false));
             resultadoValidacion.put("professoratEsMiembroT", resultadosTaiga.getOrDefault("professoratEsMiembroT", false));
             resultadoValidacion.put("todosMiembrosEnProyecto", resultadosTaiga.getOrDefault("todosMiembrosEnProyecto", false));
@@ -106,7 +120,7 @@ public class TaigaService {
     }
 
     //2 Verificar si el proyecto es privado. Si no es: professor y los alumnos son miembros del proyecto
-    private Map<String, Boolean> verificarMiembros(String proyecto, String profesorUsername, List<String> alumnosUsernames ) {
+    private Map<String, Boolean> verificarMiembros(String proyecto, String profesorUsername, List<String> alumnosUsernames,String taigaApiBaseUrl ) {
         Map<String, Boolean> resultados = new HashMap<>();
         // Valores por defecto para evitar NullPointerException
         resultados.put("proyectoPublico", false);
@@ -161,6 +175,7 @@ public class TaigaService {
         String proyectoID;
         proyecto = proyecto.split("/")[0];
 
+        String taigaApiBaseUrl = obtenerUrlBaseTaiga(equipo);
         String url = String.format("%sprojects/by_slug?slug=%s", taigaApiBaseUrl, proyecto);
         ResponseEntity<JsonNode> response;
         try {
@@ -244,6 +259,7 @@ public class TaigaService {
             return; // Todos tienen ID, nos ahorramos la llamada a la API
         }
 
+        String taigaApiBaseUrl = obtenerUrlBaseTaiga(equipo);
         // 3. Llamamos a Taiga para traernos los miembros del proyecto
         String url = String.format("%sprojects/by_slug?slug=%s", taigaApiBaseUrl, equipo.getTaigaProyecto());
 
@@ -284,6 +300,7 @@ public class TaigaService {
 
 
         // Llamamos a la API de historias de Taiga usando ese ID
+        String taigaApiBaseUrl = obtenerUrlBaseTaiga(equipo);
         String url = String.format("%suserstories?project=%s", taigaApiBaseUrl, taigaProjectId);
 
         HttpHeaders headers = new HttpHeaders();
@@ -344,6 +361,7 @@ public class TaigaService {
     //8. Caragamos por primera vez las tareas del equipo
     public void cargarTareasIniciales(Equipo equipo, Integer taigaProjectId) {
         // Llamamos a la API de tareas de Taiga usando ese ID
+        String taigaApiBaseUrl = obtenerUrlBaseTaiga(equipo);
         String url = String.format("%stasks?project=%s", taigaApiBaseUrl, taigaProjectId);
 
         HttpHeaders headers = new HttpHeaders();
@@ -470,7 +488,7 @@ public class TaigaService {
                     .filter(tarea -> tarea.getEstudiante() != null && tarea.getEstudiante().getId() == estudiante.getId())
                     .filter(tarea -> tarea.getHistoriaUsuario() != null)
                     .filter(tarea -> "Done".equalsIgnoreCase(tarea.getHistoriaUsuario().getEstado()))
-                    .map(tarea -> tarea.getHistoriaUsuario().getId())
+                    .map(tarea -> tarea.getHistoriaUsuario().getIdHistoria())
                     .distinct()
                     .count();
 
@@ -664,7 +682,7 @@ public class TaigaService {
         System.out.println("Fecha de sincronización de tareas actualizada para el equipo: " + equipo.getNombre());
     }
 
-    public void sincronizarTareas(Integer equipoId) {
+    public void sincronizarTareas(Integer equipoId, boolean todo) {
 
         // 1. Validar que el equipo existe
         Equipo equipo = equipoRepository.findById(equipoId)
@@ -678,10 +696,11 @@ public class TaigaService {
         LocalDateTime ultimaSincronizacion = equipo.getUltimaSincronizacionTareas();
 
         // 4. Construir la URL base
+        String taigaApiBaseUrl = obtenerUrlBaseTaiga(equipo);
         String url = String.format("%stasks?project=%s", taigaApiBaseUrl, taigaProjectId);
 
         // 5. Si hay una fecha...
-        if (ultimaSincronizacion != null) {
+        if (!todo && ultimaSincronizacion != null) {
             String fechaFormateada = ultimaSincronizacion.atOffset(ZoneOffset.UTC)
                     .format(DateTimeFormatter.ISO_INSTANT);
             url += "&modified_date__gte=" + fechaFormateada;
@@ -735,6 +754,7 @@ public class TaigaService {
                             historiaVinculada = historiasRepository.findByIdHistoriaAndEquipoId(idHistoriaTaiga,equipoId).orElse(null);
                         }
 
+
                         // Buscar la tarea en BD o crear una nueva si no existe
                         Integer taskId = taskNode.path("id").asInt();
                         TareasEquipo tarea = tareasRepository.findByIdTareaAndEquipoId(taskId,equipoId)
@@ -765,7 +785,7 @@ public class TaigaService {
         }
     }
 
-    public void sincronizarHistorias(Integer equipoId) {
+    public void sincronizarHistorias(Integer equipoId, boolean todo) {
 
         // 1. Validar que el equipo existe
         Equipo equipo = equipoRepository.findById(equipoId)
@@ -780,10 +800,11 @@ public class TaigaService {
         LocalDateTime ultimaSincronizacion = equipo.getUltimaSincronizacionHistorias();
 
         // 4. Construir la URL base
+        String taigaApiBaseUrl = obtenerUrlBaseTaiga(equipo);
         String url = String.format("%suserstories?project=%s", taigaApiBaseUrl, taigaProjectId);
 
         // 5. Añadir el filtro de fecha si no es la primera vez
-        if (ultimaSincronizacion != null) {
+        if (!todo && ultimaSincronizacion != null) {
             String fechaFormateada = ultimaSincronizacion.atOffset(ZoneOffset.UTC)
                     .format(DateTimeFormatter.ISO_INSTANT);
             url += "&modified_date__gte=" + fechaFormateada;

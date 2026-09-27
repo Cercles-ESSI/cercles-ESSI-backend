@@ -44,9 +44,9 @@ public class TaigaController {
             String proyectoUrl = (String) request.get("proyectoUrl");
             List<Integer> miembrosIds = (List<Integer>) request.get("miembrosIds");
             Integer profesorId = Integer.valueOf(request.get("profesorId").toString());
-            String profesorTaiga = (String) request.get("profesorTaiga");
+            Integer equipoId = Integer.valueOf(request.get("equipoId").toString());
 
-            Map<String, Boolean> resultado = taigaService.validarProyecto(profesorId, miembrosIds, profesorTaiga, proyectoUrl);
+            Map<String, Boolean> resultado = taigaService.validarProyecto(profesorId, miembrosIds, equipoId, proyectoUrl);
 
             return ResponseEntity.ok(resultado);
         } catch (HttpClientErrorException e) {
@@ -132,12 +132,13 @@ public class TaigaController {
     @PostMapping("/equipo/{equipoId}/sincronizar")
     public ResponseEntity<?> sincronizarTaigaLocal(
             @PathVariable Integer equipoId,
-            @RequestParam String proyecto) {
+            @RequestParam String proyecto,
+            @RequestParam(defaultValue = "false") Boolean syncAll){
 
         try {
             // Llamamos al servicio que hace la petición a la API de Taiga
-            taigaService.sincronizarHistorias(equipoId);
-            taigaService.sincronizarTareas(equipoId);
+            taigaService.sincronizarHistorias(equipoId, syncAll);
+            taigaService.sincronizarTareas(equipoId,syncAll);
 
 
             return ResponseEntity.ok().build();
