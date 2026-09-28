@@ -343,7 +343,8 @@ public class CursoService {
                             numeroEstudiantes,
                             numeroEquipos,
                             numeroEstudiantesSinEquipo,
-                            curso.getGestionTareas()
+                            curso.getGestionTareas(),
+                            curso.getLinkTaiga()
                     );
                 })
                 .toList();
@@ -437,7 +438,8 @@ public class CursoService {
                 estudiantesSinGrupo.stream().map(EstudianteDTO::getGrupo).toList(),
                 nombresProfesores,
                 equiposConMiembros,
-                curso.getGestionTareas()
+                curso.getGestionTareas(),
+                curso.getLinkTaiga()
         );
     }
 
@@ -475,8 +477,13 @@ public class CursoService {
                     taigaService.desconectarProyecto(equipo.getId());
                 }
             }
+            cursoExistente.setLinkTaiga(null);
         }else{
             cursoExistente.setGestionTareas(cursoRequest.getGestionTareas());
+
+        }
+        if(cursoRequest.getLinkTaiga() != null){
+            cursoExistente.setLinkTaiga(cursoRequest.getLinkTaiga());
         }
 
 

@@ -150,7 +150,7 @@ public class GitHubController {
 
     @PreAuthorize("hasAuthority('PROFESOR')")
     @PostMapping("/equipo/{idEquipo}/metrics/{organizacion}")
-    public ResponseEntity<?> obtenerMetricas(@PathVariable String organizacion, @RequestParam List<Integer> estudiantesIds, @PathVariable Integer idEquipo, @RequestParam Boolean isGithub) {
+    public ResponseEntity<?> obtenerMetricas(@PathVariable String organizacion, @RequestParam List<Integer> estudiantesIds, @PathVariable Integer idEquipo, @RequestParam Boolean isGithub,@RequestParam(defaultValue = "false") Boolean syncAll) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
@@ -172,7 +172,7 @@ public class GitHubController {
             }
             // Llamada al servicio con el token personal
             githubService.obtenerMetricasOrganizacion(
-                    organizacion, usuarios, tokenDescifrado, estudiantesIds,isGithub,idEquipo
+                    organizacion, usuarios, tokenDescifrado, estudiantesIds,isGithub,idEquipo,syncAll
             );
 
             return ResponseEntity.ok(Map.of("success", true, "message", "Sincronización completada"));

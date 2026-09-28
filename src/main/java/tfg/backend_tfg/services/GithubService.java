@@ -221,7 +221,8 @@ public class GithubService {
                         tokenParaHilo,
                         estudiantesIds,
                         gestionProyecto,
-                        equipoId
+                        equipoId,
+                        true
                 );
             });
         }
@@ -587,7 +588,7 @@ public class GithubService {
     
     
     //8. obtener metricas de una org
-    public void obtenerMetricasOrganizacion(String organizacion, List<String> usuarios, String accessToken, List<Integer> estudiantesIds, Boolean gestionProyecto, Integer equipoId) {
+    public void obtenerMetricasOrganizacion(String organizacion, List<String> usuarios, String accessToken, List<Integer> estudiantesIds, Boolean gestionProyecto, Integer equipoId, Boolean syncAll) {
         List<String> repositorios = obtenerRepositorios(organizacion, accessToken);
 
         Equipo equipo = equipoRepository.findById(equipoId)
@@ -595,7 +596,7 @@ public class GithubService {
 
         //Fecha para indicar cual fue la ultima vez que se actualizo los datos
         String sinceDateIsoTemp = null;
-        if (equipo.getUltimaSincronizacionGit() != null) {
+        if (!syncAll && equipo.getUltimaSincronizacionGit() != null) {
             sinceDateIsoTemp = equipo.getUltimaSincronizacionGit()
                     .atOffset(ZoneOffset.UTC)
                     .format(DateTimeFormatter.ISO_INSTANT);
@@ -651,7 +652,7 @@ public class GithubService {
                 System.err.println("Error procesando métricas de repositorio: " + e.getMessage());
             }
         }
-        guardarMetricasBasicas(aggregatedMetrics, usernameToEstudiante, equipo);
+        guardarMetricasBasicas(aggregatedMetrics, usernameToEstudiante, equipo,syncAll);
 
         if (gestionProyecto) {
             guardarIssuesDeProyecto(globalIssuesRecopilados, usernameToEstudiante, equipo);
@@ -663,7 +664,7 @@ public class GithubService {
     }
 
     //Funcion para guardar métricas de código (Commits, PRs, etc.)
-    private void guardarMetricasBasicas(Map<String, MetricasUsuarioDTO> aggregatedMetrics, Map<String, Estudiante> usernameToEstudiante, Equipo equipo) {
+    private void guardarMetricasBasicas(Map<String, MetricasUsuarioDTO> aggregatedMetrics, Map<String, Estudiante> usernameToEstudiante, Equipo equipo, Boolean syncAll) {
         List<MetricasEstudiante> metricasParaGuardar = new ArrayList<>();
 
         for (MetricasUsuarioDTO dto : aggregatedMetrics.values()) {
@@ -677,10 +678,19 @@ public class GithubService {
                 metricas.setEstudiante(estudiante);
                 metricas.setEquipo(equipo);
 
-                metricas.setTotalCommits( (metricas.getTotalCommits() == null ? 0 : metricas.getTotalCommits()) + dto.getTotalCommits() );
-                metricas.setLinesAdded( (metricas.getLinesAdded() == null ? 0 : metricas.getLinesAdded()) + dto.getLinesAdded() );
-                metricas.setLinesRemoved( (metricas.getLinesRemoved() == null ? 0 : metricas.getLinesRemoved()) + dto.getLinesRemoved() );
-                metricas.setPullRequestsMerged( (metricas.getPullRequestsMerged() == null ? 0 : metricas.getPullRequestsMerged()) + dto.getPullRequestsMerged() );
+                if (Boolean.TRUE.equals(syncAll)) {
+                    // Sincronización completa: Sobrescribir con los totales reales de GitHub
+                    metricas.setTotalCommits(dto.getTotalCommits());
+                    metricas.setLinesAdded(dto.getLinesAdded());
+                    metricas.setLinesRemoved(dto.getLinesRemoved());
+                    metricas.setPullRequestsMerged(dto.getPullRequestsMerged());
+                } else {
+                    // Sincronización parcial : Sumar los nuevos al histórico de la BD
+                    metricas.setTotalCommits( (metricas.getTotalCommits() == null ? 0 : metricas.getTotalCommits()) + dto.getTotalCommits() );
+                    metricas.setLinesAdded( (metricas.getLinesAdded() == null ? 0 : metricas.getLinesAdded()) + dto.getLinesAdded() );
+                    metricas.setLinesRemoved( (metricas.getLinesRemoved() == null ? 0 : metricas.getLinesRemoved()) + dto.getLinesRemoved() );
+                    metricas.setPullRequestsMerged( (metricas.getPullRequestsMerged() == null ? 0 : metricas.getPullRequestsMerged()) + dto.getPullRequestsMerged() );
+                }
 
                 metricasParaGuardar.add(metricas);
             }

@@ -18,10 +18,11 @@ public class CursoDetalleDTO {
     private List<String> nombresProfesores;
     private List<EquipoDTO> equipos;
     private String gestionTareas;
+    private String urlTaiga;
 
     public CursoDetalleDTO(int id, String nombreAsignatura, int añoInicio, int cuatrimestre, boolean activo, String githubAsignatura, String tokenGithub,
                            List<String> nombresEstudiantesSinGrupo, List<String> correosEstudiantesSinGrupo,
-                           List<String> gruposEstudiantesSinGrupo, List<String> nombresProfesores, List<EquipoDTO> equipos, String gestionTareas) {
+                           List<String> gruposEstudiantesSinGrupo, List<String> nombresProfesores, List<EquipoDTO> equipos, String gestionTareas, String urlTaiga) {
         this.id = id;
         this.nombreAsignatura = nombreAsignatura;
         this.añoInicio = añoInicio;
@@ -35,5 +36,6 @@ public class CursoDetalleDTO {
         this.nombresProfesores = nombresProfesores;
         this.equipos = equipos;
         this.gestionTareas = gestionTareas;
+        this.urlTaiga = urlTaiga;
     }
 }

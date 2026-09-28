@@ -182,7 +182,8 @@ public class UsuarioController {
                     0,
                     0,
                     0,
-                    ec.getCurso().getGestionTareas()
+                    ec.getCurso().getGestionTareas(),
+                    ec.getCurso().getLinkTaiga()
             ))
                     .toList();
 

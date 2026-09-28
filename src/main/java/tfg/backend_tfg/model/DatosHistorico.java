@@ -3,6 +3,9 @@ package tfg.backend_tfg.model;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -19,6 +22,7 @@ public class DatosHistorico {
     // A qué fase de evaluación pertenece esta foto (Evaluación 1, 2, 3...)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "evaluacion_id")
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Evaluacion evaluacion;
 
     // De qué alumno son estos datos
