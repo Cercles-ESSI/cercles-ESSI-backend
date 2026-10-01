@@ -388,6 +388,7 @@ public class CursoService {
         // Equipos con miembros
         List<EquipoDTO> equiposConMiembros = equipoRepository.findByCursoId(cursoId).stream()
                 .map(equipo -> {
+
                     Map<String, String> miembros = estudianteEquipoRepository.findByEquipoId(equipo.getId()).stream()
                             .collect(Collectors.toMap(
                                     estudianteEquipo -> estudianteEquipo.getEstudiante().getNombre(),
@@ -397,19 +398,34 @@ public class CursoService {
                                             .map(EstudianteCurso::getGrupo)
                                             .orElse("N/A")
                             ));
-                    Map<String, String> correos = estudianteEquipoRepository.findByEquipoId(equipo.getId()).stream()
+                    Map<String,String> usuariosGithub = estudianteEquipoRepository.findByEquipoId(equipo.getId()).stream()
                             .collect(Collectors.toMap(
-                                    estudianteEquipo -> estudianteEquipo.getEstudiante().getNombre(),
-                                    estudianteEquipo -> estudianteEquipo.getEstudiante().getCorreo()
+                                    ee -> ee.getEstudiante().getNombre(),
+                                    ee -> {
+                                        String username = ee.getEstudiante().getGitUsername();
+                                                return username != null ? username : "";
+                                    }
+                            ));
+
+                    // Mapa para usuarios de Taiga
+                    Map<String, String> usuariosTaiga = estudianteEquipoRepository.findByEquipoId(equipo.getId()).stream()
+                            .collect(Collectors.toMap(
+                                    ee -> ee.getEstudiante().getNombre(),
+                                    ee -> {
+                                        String username = ee.getEstudiante().getTaigaUsername();
+                                        return username != null ? username : "";
+                                    }
                             ));
 
                     return new EquipoDTO(
                             equipo.getNombre(),
                             equipo.getId(),
                             equipo.getEvaluador() != null ? equipo.getEvaluador().getId() : null,
-                            equipo.getGitOrganizacion() != null,
+                            equipo.getGitOrganizacion(),
+                            equipo.getTaigaProyecto(),
                             miembros,
-                            correos
+                            usuariosGithub,
+                            usuariosTaiga
                     );
                 })
                 .toList();

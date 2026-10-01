@@ -14,8 +14,10 @@ public class EquipoDTO {
     private String nombreEquipo;
     private int id_equipo;
     private int idProfe;
-    private boolean validado;
+    private String org;
+    private String TaigaPrj;
     private Map<String,String> miembros;
-    private Map<String,String> correos;
+    private Map<String, String> usuariosGithub;
+    private Map<String, String> usuariosTaiga;
 
 }

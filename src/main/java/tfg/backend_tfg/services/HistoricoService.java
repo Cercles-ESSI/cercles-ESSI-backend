@@ -153,7 +153,7 @@ public class HistoricoService {
             Map<String, Integer> lineas = new HashMap<>();
 
             for (DatosHistorico registro : historialEvaluacion) {
-                // OJO: Si en tu modelo Estudiante el nombre del atributo es diferente a getNombre() (ej. getUsername()), cámbialo aquí
+
                 String nombreEstudiante = registro.getEstudiante().getNombre();
 
                 tareasCerradas.put(nombreEstudiante, registro.getTareasCerradas());
