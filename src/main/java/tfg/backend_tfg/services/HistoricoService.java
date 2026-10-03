@@ -1,5 +1,6 @@
 package tfg.backend_tfg.services;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
+import tfg.backend_tfg.security.TokenEncrypter;
 
 @Service
 public class HistoricoService {
@@ -25,11 +27,22 @@ public class HistoricoService {
     private DatosHistoricoRepository datosHistoricoRepository;
 
     @Autowired
+    private MetricasEstudianteRepository metricasEstudianteRepository;
+
+    @Autowired
     private TaigaService taigaService;
 
+    @Autowired
+    private GithubService githubService;
 
     @Autowired
     private TareasEquipoRepository tareasEquipoRepository;
+
+    private final TokenEncrypter tokenEncrypter;
+
+    public HistoricoService(TokenEncrypter tokenEncrypter) {
+        this.tokenEncrypter = tokenEncrypter;
+    }
 
     /**
      * Expresión CRON: "0 59 23 * * ?"
@@ -62,19 +75,27 @@ public class HistoricoService {
             for (Equipo equipo : equiposDelCurso) {
                 System.out.println("[CRON CERCLES] Recolectando foto histórica para el equipo: " + equipo.getNombre() + " en la evaluación ID: " + evaluacion.getId());
 
-                if (equipo.getTaigaProyectoId() == null) {
+                if(evaluacion.getCurso().getGestionTareas().equals("Taiga") && equipo.getTaigaProyectoId() == null){
                     System.out.println("[CRON AVISO] El equipo " + equipo.getNombre() + " no tiene Taiga configurado (ID nulo). Se salta este equipo.");
+                    continue;
+                }else if(equipo.getGitOrganizacion() == null){
+                    System.out.println("[CRON AVISO] El equipo " + equipo.getNombre() + " no tiene GitHub configurado (organizacion nulo). Se salta este equipo.");
                     continue;
                 }
 
+
                 try {
-                    // 3. Sincronizamos primero Taiga para tener los datos actualizados de última hora
+                    // 3. Sincronizamos primero Taiga i GitHub para tener los datos actualizados de última hora
                     taigaService.sincronizarTareas(equipo.getId(),false);
                     taigaService.sincronizarHistorias(equipo.getId(),false);
+
+                    SyncGitHub(equipo,evaluacion.getCurso().getTokenGithubAsignatura());
 
                     // 4. Llamamos a funciones estadísticas de Taiga
                    TareasEquipoDTO estadisticasTaiga = taigaService.calcularEstadisticasEquipoTareas(equipo.getId(), equipo.getTaigaProyecto(), "hola", 11);
                     HistoriasEquipoDTO estadisticasHistorias = taigaService.calcularEstadisticasHistorias(equipo.getId(), "hola", 11);
+
+
 
                     // 5. Sacamos la fotografía miembro por miembro del equipo
                     for (Estudiante estudiante : equipo.getEstudiantes()) {
@@ -91,6 +112,15 @@ public class HistoricoService {
                                 .findFirst()
                                 .orElse(new HistoriasEstudianteDTO());
 
+                        MetricasEstudiante metricasGit = metricasEstudianteRepository
+                                .findByEstudianteIdAndEquipoId(estudiante.getId(), equipo.getId())
+                                .orElse(new MetricasEstudiante());
+                        int commits = metricasGit.getTotalCommits() != null ? metricasGit.getTotalCommits() : 0;
+                        int lineasAñadidas = metricasGit.getLinesAdded() != null ? metricasGit.getLinesAdded() : 0;
+                        int lineasBorradas = metricasGit.getLinesRemoved() != null ? metricasGit.getLinesRemoved() : 0;
+
+                        int lineasModificadas = lineasAñadidas + lineasBorradas;
+
                         // 6. Construimos la entidad histórica (Snapshot)
                         DatosHistorico foto = DatosHistorico.builder()
                                 .evaluacion(evaluacion)
@@ -98,8 +128,8 @@ public class HistoricoService {
                                 .tareasCerradas(tareasEst.getTareasCerradas())
                                 .tareasAbiertas(tareasEst.getTareasAbiertas())
                                 .storyPointsCompletados(historiasEst.getPuntosEsfuerzo())
-                                .commitsRealizados(0)
-                                .lineasModificadas(0)
+                                .commitsRealizados(commits)
+                                .lineasModificadas(lineasModificadas)
                                 .build();
 
                         // 7. Guardamos en la base de datos relacional
@@ -125,6 +155,49 @@ public class HistoricoService {
         }
         System.out.println("[CRON CERCLES] Proceso de guardado histórico finalizado con éxito.");
     }
+
+    public void SyncGitHub(Equipo equipo, String tokenGithub){
+        List<Integer> estudiantesIds = equipo.getEstudiantes().stream()
+                .map(Estudiante::getId)
+                .toList();
+
+        List<String> usuariosGit = equipo.getEstudiantes().stream()
+                .map(Estudiante::getGitUsername)
+                .filter(username -> username != null && !username.trim().isEmpty())
+                .toList();
+
+        String organizacionGit = equipo.getGitOrganizacion();
+
+        String tokenDescifrado = null;
+        try {
+            if (tokenGithub != null) {
+                tokenDescifrado = tokenEncrypter.decrypt(tokenGithub);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error al descifrar el token del curso.", e);
+        }
+
+        if (organizacionGit != null && tokenDescifrado != null && !usuariosGit.isEmpty()) {
+            try {
+                System.out.println("[CRON CERCLES] Sincronizando GitHub para el equipo: " + equipo.getNombre());
+
+                githubService.obtenerMetricasOrganizacion(
+                        organizacionGit,
+                        usuariosGit,
+                        tokenDescifrado,
+                        estudiantesIds,
+                        false,
+                        equipo.getId(),
+                        false
+                );
+            } catch (Exception e) {
+                System.err.println("[CRON ERROR] Fallo al sincronizar GitHub del equipo " + equipo.getId() + ": " + e.getMessage());
+            }
+        } else {
+            System.out.println("[CRON AVISO] El equipo " + equipo.getNombre() + " no tiene GitHub configurado. Se usarán los datos cacheados.");
+        }
+    }
+
 
     public List<HistoricoFrontendDTO> obtenerDatosDashboard(Integer equipoId) {
         // 1. Sacamos los IDs de los estudiantes del equipo
