@@ -23,6 +23,7 @@ public class EquipoDetalleDTO {
     private String githubAsignatura;
     private String tokenGithub;
     private String gestionTareas;
+    private boolean iteracionIniciada;
 
     // Información del evaluador
     private int evaluadorId;

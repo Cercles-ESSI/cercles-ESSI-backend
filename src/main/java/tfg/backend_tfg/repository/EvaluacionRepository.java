@@ -4,10 +4,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import tfg.backend_tfg.model.Curso;
 import tfg.backend_tfg.model.Evaluacion;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface EvaluacionRepository extends JpaRepository<Evaluacion, Integer> {
     List<Evaluacion> findByCursoId(Integer cursoId);
@@ -22,6 +24,8 @@ public interface EvaluacionRepository extends JpaRepository<Evaluacion, Integer>
     List<Integer> findIdsByCursoId(@Param("cursoId") Integer cursoId);
 
     List<Evaluacion> findByFechaFin(LocalDate fechaFin);
+
+    Optional <Evaluacion>  findFirstByCursoOrderByFechaInicioAsc(Curso curso);
 
     //Encontrar todas las evaluaciones de un professor con su correo
     List<Evaluacion> findEvaluacionesByCurso_Profesores_Profesor_Correo(String correo);

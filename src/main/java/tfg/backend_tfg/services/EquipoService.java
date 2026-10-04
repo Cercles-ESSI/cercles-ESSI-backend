@@ -1,5 +1,6 @@
 package tfg.backend_tfg.services;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -14,23 +15,8 @@ import org.springframework.stereotype.Service;
 import tfg.backend_tfg.dto.EquipoDetalleDTO;
 import tfg.backend_tfg.dto.EquipoSummaryDTO;
 import tfg.backend_tfg.dto.EstudianteDTO;
-import tfg.backend_tfg.model.Curso;
-import tfg.backend_tfg.model.Equipo;
-import tfg.backend_tfg.model.Estudiante;
-import tfg.backend_tfg.model.EstudianteCursoId;
-import tfg.backend_tfg.model.EstudianteEquipo;
-import tfg.backend_tfg.model.EstudianteEquipoId;
-import tfg.backend_tfg.model.Profesor;
-import tfg.backend_tfg.model.ProfesorCurso;
-import tfg.backend_tfg.model.ProfesorCursoId;
-import tfg.backend_tfg.repository.CursoRepository;
-import tfg.backend_tfg.repository.EquipoRepository;
-import tfg.backend_tfg.repository.EstudianteCursoRepository;
-import tfg.backend_tfg.repository.EstudianteEquipoRepository;
-import tfg.backend_tfg.repository.EstudianteRepository;
-import tfg.backend_tfg.repository.ProfesorCursoRepository;
-import tfg.backend_tfg.repository.ProfesorRepository;
-import tfg.backend_tfg.repository.UsuarioRepository;
+import tfg.backend_tfg.model.*;
+import tfg.backend_tfg.repository.*;
 import tfg.backend_tfg.security.TokenEncrypter;
 
 @Service
@@ -60,7 +46,11 @@ public class EquipoService {
     @Autowired
     private EstudianteCursoRepository estudianteCursoRepository;
 
+    @Autowired
+    private EvaluacionRepository evaluacionRepository;
+
     private final TokenEncrypter tokenEncrypter;
+
 
     @Autowired
     public EquipoService(TokenEncrypter tokenEncrypter) {
@@ -140,6 +130,12 @@ public class EquipoService {
 
         // Obtener detalles del curso
         Curso curso = equipo.getCurso();
+        LocalDate fechaInicio = evaluacionRepository.findFirstByCursoOrderByFechaInicioAsc(equipo.getCurso())
+                .map(Evaluacion::getFechaInicio)
+                .orElse(null);
+
+        // 2. Calculas si ya ha empezado comparando con la fecha actual
+        boolean iteracionIniciada = fechaInicio != null && !LocalDate.now().isBefore(fechaInicio);
 
         // Obtener detalles del evaluador
         int evaluadorId = equipo.getEvaluador().getId();
@@ -185,6 +181,7 @@ public class EquipoService {
                 curso.getGithubAsignatura(),
                 tokenDescifrado,
                 curso.getGestionTareas(),
+                iteracionIniciada,
                 evaluadorId,
                 evaluadorNombre,
                 evaluadorCorreo,
