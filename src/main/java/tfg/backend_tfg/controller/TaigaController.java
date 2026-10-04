@@ -108,6 +108,10 @@ public class TaigaController {
             @RequestParam(required = false) Integer evaluacionId) {
 
         try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(403).body(Map.of("error", "Usuario no autenticado"));
+            }
             // Pasamos los filtros a los 3 métodos de tu servicio
             TareasEquipoDTO estadisticasTareas = taigaService.calcularEstadisticasEquipoTareas(equipoId, proyecto, tipoFiltro, evaluacionId);
 
@@ -136,6 +140,10 @@ public class TaigaController {
             @RequestParam(defaultValue = "false") Boolean syncAll){
 
         try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(403).body(Map.of("error", "Usuario no autenticado"));
+            }
             // Llamamos al servicio que hace la petición a la API de Taiga
             taigaService.sincronizarHistorias(equipoId, syncAll);
             taigaService.sincronizarTareas(equipoId,syncAll);

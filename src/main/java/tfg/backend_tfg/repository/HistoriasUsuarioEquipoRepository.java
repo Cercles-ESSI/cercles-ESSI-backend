@@ -25,4 +25,12 @@ public interface HistoriasUsuarioEquipoRepository extends JpaRepository<Historia
     Optional<HistoriasUsuarioEquipo> findByIdHistoriaAndEquipoId(
             Integer idHistoria, Integer equipoId
     );
+
+    // Suma de todos los Puntos de Esfuerzo de un equipo
+    @Query("SELECT SUM(h.puntosEsfuerzo) FROM HistoriasUsuarioEquipo h WHERE h.equipo.id = :equipoId")
+    Integer sumTotalStoryPointsByEquipoId(@Param("equipoId") Integer equipoId);
+
+    // Suma de Puntos de Esfuerzo completados
+    @Query("SELECT SUM(h.puntosEsfuerzo) FROM HistoriasUsuarioEquipo h WHERE h.equipo.id = :equipoId AND h.estado = 'Closed'")
+    Integer sumCompletedStoryPointsByEquipoId(@Param("equipoId") Integer equipoId);
 }

@@ -23,4 +23,12 @@ public interface MetricasEstudianteRepository extends JpaRepository<MetricasEstu
     @Query("DELETE FROM MetricasEstudiante m WHERE m.equipo.id = :equipoId")
     void deleteByEquipoId(@Param("equipoId") Integer equipoId);
 
+    // Total de commits de un equipo
+    @Query("SELECT SUM(m.totalCommits) FROM MetricasEstudiante m WHERE m.equipo.id = :equipoId")
+    Integer sumTotalCommitsByEquipoId(@Param("equipoId") Integer equipoId);
+
+    // Total de PRs fusionados de un equipo
+    @Query("SELECT SUM(m.pullRequestsMerged) FROM MetricasEstudiante m WHERE m.equipo.id = :equipoId")
+    Integer sumPullRequestsMergedByEquipoId(@Param("equipoId") Integer equipoId);
+
 }
