@@ -33,6 +33,12 @@ tags:
     description: Obtener información de GitHub
   - name: Taiga
     description: Obtener información de Taiga
+  - name: Historial
+    description: Obtener informació historia de GitHub i/o Taiga
+  - name: Home
+    description: Obtener resumen inicial del usuario
+  - name: Comparativa
+    description: Obtener comparativa de los equipos
 
 paths:
   /api/auth/login:
@@ -1746,6 +1752,12 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - organizacionUrl
+                - miembrosIds
+                - profesorId
+                - githubAsignatura
+                - tokenGithub
               properties:
                 organizacionUrl:
                   type: string
@@ -1759,6 +1771,12 @@ paths:
                 profesorId:
                   type: integer
                   description: ID del profesor que será validado en la organización.
+                githubAsignatura:
+                  type: string
+                  description: Nombre de la asignatura o repositorio base.
+                tokenGithub:
+                  type: string
+                  description: Token de acceso a GitHub.
       responses:
         "200":
           description: Validación exitosa
@@ -1769,40 +1787,21 @@ paths:
                 properties:
                   todosUsuariosGitConfigurados:
                     type: boolean
-                    description: Indica si todos los usuarios tienen configurado su GitHub.
                   profesorGitConfigurado:
                     type: boolean
-                    description: Indica si el profesor tiene configurado su GitHub.
                   professoratEsMiembro:
                     type: boolean
-                    description: Indica si la cuenta 'professorat-amep' es miembro de la organización.
                   professoratEsAdmin:
                     type: boolean
-                    description: Indica si la cuenta 'professorat-amep' es admin de la organización.
                   todosMiembrosEnOrganizacion:
                     type: boolean
-                    description: Indica si todos los miembros especificados están en la organización.
                   profesorEnOrganizacion:
                     type: boolean
-                    description: Indica si el profesor está en la organización.
         "403":
           description: Usuario no autenticado
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
         "500":
-          description: Error interno del servidor
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
+          description: Error interno del servidor o error con la API de GitHub
+
   /api/github/confirmar-organizacion:
     post:
       tags:
@@ -1826,97 +1825,145 @@ paths:
       responses:
         "200":
           description: Organización asignada correctamente
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  mensaje:
-                    type: string
+        "403":
+          description: Usuario no autenticado
         "500":
           description: Error interno del servidor
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-  /api/github/metrics/{organizacion}:
+
+  /api/github/disconnect-organizacion:
+    delete:
+      tags:
+        - GitHub
+      summary: Desconectar organización de GitHub
+      description: Permite desconectar una organización de GitHub previamente asociada a un equipo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                equipoId:
+                  type: integer
+                  description: ID del equipo a desconectar.
+      responses:
+        "200":
+          description: Organización desconectada correctamente
+        "403":
+          description: Usuario no autenticado
+        "404":
+          description: Equipo no encontrado
+        "500":
+          description: Error interno del servidor
+
+  /api/github/equipo/{idEquipo}/consultar-metrics:
     get:
       tags:
         - GitHub
-      summary: Obtener métricas de GitHub para una organización
-      description: >
-        Este endpoint permite obtener métricas detalladas (commits, líneas añadidas/eliminadas, pull requests) de una organización específica en GitHub.
+      summary: Consultar métricas de la organización
+      description: Obtiene las métricas generales de la organización en GitHub para un equipo específico (Solo profesor).
       parameters:
+        - name: idEquipo
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Métricas obtenidas correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "403":
+          description: Usuario no autenticado
+        "500":
+          description: Error interno del servidor
+
+  /api/github/equipo/{idEquipo}/consultar-metrics-proyecto:
+    get:
+      tags:
+        - GitHub
+      summary: Consultar métricas de gestión de proyecto
+      description: Obtiene las métricas de gestión del proyecto en GitHub para un equipo específico (Solo profesor).
+      parameters:
+        - name: idEquipo
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Métricas obtenidas correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "403":
+          description: Usuario no autenticado
+        "500":
+          description: Error interno del servidor
+
+  /api/github/equipo/{idEquipo}/metrics/{organizacion}:
+    post:
+      tags:
+        - GitHub
+      summary: Obtener y sincronizar métricas de GitHub
+      description: Permite obtener y sincronizar las métricas de los estudiantes de una organización específica (Solo profesor).
+      parameters:
+        - name: idEquipo
+          in: path
+          required: true
+          schema:
+            type: integer
         - name: organizacion
           in: path
           required: true
-          description: Nombre de la organización en GitHub.
           schema:
             type: string
         - name: estudiantesIds
           in: query
           required: true
-          description: Lista de IDs de los estudiantes cuyos datos se desean obtener.
           schema:
             type: array
             items:
               type: integer
+        - name: isGithub
+          in: query
+          required: true
+          schema:
+            type: boolean
+        - name: syncAll
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
-          description: Métricas obtenidas exitosamente
+          description: Sincronización completada
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    username:
-                      type: string
-                      description: Nombre de usuario en GitHub.
-                    nombre:
-                      type: string
-                      description: Nombre del estudiante.
-                    totalCommits:
-                      type: integer
-                      description: Total de commits realizados.
-                    linesAdded:
-                      type: integer
-                      description: Líneas añadidas.
-                    linesRemoved:
-                      type: integer
-                      description: Líneas eliminadas.
-                    pullRequestsCreated:
-                      type: integer
-                      description: Pull requests creadas.
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
         "403":
           description: Usuario no autenticado
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
         "500":
           description: Error interno del servidor
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
+
   /api/github/callback:
     post:
       tags:
         - GitHub
       summary: Conectar usuario con GitHub
-      description: >
-        Este endpoint gestiona el callback de GitHub OAuth para conectar la cuenta de GitHub del usuario con su perfil en el sistema.
+      description: Gestiona el callback de GitHub OAuth para conectar la cuenta.
       requestBody:
         required: true
         content:
@@ -1926,26 +1973,110 @@ paths:
               properties:
                 code:
                   type: string
-                  description: Código de autorización proporcionado por GitHub.
-                  example: "123abc456def"
+                  description: Código de autorización de GitHub.
       responses:
         "200":
           description: Conexión exitosa
+        "400":
+          description: Código faltante
+        "403":
+          description: Usuario no autenticado
+        "500":
+          description: Error interno
+
+  /api/github/user-data:
+    get:
+      tags:
+        - GitHub
+      summary: Obtener datos del usuario en GitHub
+      description: Recupera repositorios y organizaciones asociadas al usuario autenticado.
+      responses:
+        "200":
+          description: Datos obtenidos exitosamente
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  message:
-                    type: string
-                    description: Mensaje de confirmación.
-                    example: "Cuenta de GitHub asociada exitosamente"
-                  githubUsername:
-                    type: string
-                    description: Nombre de usuario en GitHub.
-                    example: "johnDoeGitHub"
-        "400":
-          description: Código faltante o inválido
+                  repositorios:
+                    type: array
+                    items:
+                      type: object
+                  organizaciones:
+                    type: array
+                    items:
+                      type: object
+        "403":
+          description: Usuario no autenticado
+        "404":
+          description: Datos no encontrados
+        "500":
+          description: Error interno
+
+  /api/github/disconnect:
+    delete:
+      tags:
+        - GitHub
+      summary: Desconectar cuenta de GitHub
+      description: Permite al usuario desconectar su cuenta personal de GitHub.
+      responses:
+        "200":
+          description: Cuenta desconectada exitosamente
+        "403":
+          description: Usuario no autenticado
+        "500":
+          description: Error interno
+  /api/taiga/validar-proyecto:
+    post:
+      tags:
+        - Taiga
+      summary: Validar proyecto de Taiga
+      description: >
+        Comprueba si un proyecto de Taiga es válido y verifica la participación de los miembros del equipo y del profesor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - proyectoUrl
+                - miembrosIds
+                - profesorId
+                - equipoId
+              properties:
+                proyectoUrl:
+                  type: string
+                  description: URL pública o identificador del proyecto en Taiga.
+                  example: "https://tree.taiga.io/project/usuario-miproyecto"
+                miembrosIds:
+                  type: array
+                  description: Lista de IDs de los miembros del equipo.
+                  items:
+                    type: integer
+                  example: [ 1, 2, 3 ]
+                profesorId:
+                  type: integer
+                  description: ID del profesor asociado al proyecto.
+                  example: 10
+                equipoId:
+                  type: integer
+                  description: ID del equipo en el sistema.
+                  example: 5
+      responses:
+        "200":
+          description: Validación completada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: boolean
+                example:
+                  "proyectoValido": true
+                  "miembrosValidos": true
+        "403":
+          description: Usuario no autenticado
           content:
             application/json:
               schema:
@@ -1953,7 +2084,52 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "Código de GitHub faltante"
+                    example: "Usuario no autenticado"
+        "500":
+          description: Error al comunicarse con Taiga o error interno
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Error al comunicarse con la API de Taiga..."
+
+  /api/taiga/confirmar-proyecto:
+    post:
+      tags:
+        - Taiga
+      summary: Confirmar y asignar proyecto de Taiga
+      description: >
+        Asigna definitivamente un proyecto validado de Taiga a un equipo específico del sistema.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - equipoId
+                - proyectoUrl
+              properties:
+                equipoId:
+                  type: integer
+                  example: 5
+                proyectoUrl:
+                  type: string
+                  example: "https://tree.taiga.io/project/usuario-miproyecto"
+      responses:
+        "200":
+          description: Proyecto asignado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: "Proyecto asignado correctamente."
         "403":
           description: Usuario no autenticado
           content:
@@ -1973,69 +2149,38 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "Error interno del servidor"
-  /api/github/disconnect:
+
+  /api/taiga/disconnect-proyecto:
     delete:
       tags:
-        - GitHub
-      summary: Desconectar cuenta de GitHub
+        - Taiga
+      summary: Desconectar proyecto de Taiga
       description: >
-        Este endpoint permite a un usuario desconectar su cuenta de GitHub del sistema.
+        Desvincula el proyecto de Taiga previamente asociado a un equipo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - equipoId
+              properties:
+                equipoId:
+                  type: integer
+                  description: ID del equipo a desconectar.
+                  example: 5
       responses:
         "200":
-          description: Cuenta desconectada exitosamente
+          description: Proyecto desconectado exitosamente
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  message:
+                  mensaje:
                     type: string
-        "403":
-          description: Usuario no autenticado
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        "500":
-          description: Error interno del servidor
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-  /api/github/user-data:
-    get:
-      tags:
-        - GitHub
-      summary: Obtener datos del usuario en GitHub
-      description: >
-        Este endpoint permite a un usuario autenticado recuperar información sobre sus repositorios y organizaciones asociadas en GitHub.
-      responses:
-        "200":
-          description: Datos obtenidos exitosamente
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  repositorios:
-                    type: array
-                    description: Lista de repositorios asociados al usuario.
-                    items:
-                      type: object
-                      additionalProperties: true
-                  organizaciones:
-                    type: array
-                    description: Lista de organizaciones a las que pertenece el usuario.
-                    items:
-                      type: object
-                      additionalProperties: true
+                    example: "Proyecto desconectado correctamente."
         "403":
           description: Usuario no autenticado
           content:
@@ -2047,7 +2192,7 @@ paths:
                     type: string
                     example: "Usuario no autenticado"
         "404":
-          description: Datos no encontrados
+          description: Equipo no encontrado
           content:
             application/json:
               schema:
@@ -2055,7 +2200,7 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "Datos no encontrados para este usuario."
+                    example: "Equipo no encontrado."
         "500":
           description: Error interno del servidor
           content:
@@ -2065,4 +2210,265 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "Error interno del servidor"
+
+  /api/taiga/equipo/{equipoId}/metrics:
+    get:
+      tags:
+        - Taiga
+      summary: Obtener métricas locales de Taiga
+      description: >
+        Obtiene las estadísticas de tareas, historias y los detalles del dashboard de un equipo (Solo accesible para PROFESOR).
+      parameters:
+        - name: equipoId
+          in: path
+          required: true
+          description: ID del equipo del cual obtener las métricas.
+          schema:
+            type: integer
+            example: 5
+        - name: proyecto
+          in: query
+          required: true
+          description: Nombre o identificador del proyecto.
+          schema:
+            type: string
+            example: "mi-proyecto-taiga"
+        - name: tipoFiltro
+          in: query
+          required: false
+          description: Tipo de filtro a aplicar a las métricas (por defecto "global").
+          schema:
+            type: string
+            default: "global"
+            example: "sprint"
+        - name: evaluacionId
+          in: query
+          required: false
+          description: ID de la evaluación específica a filtrar.
+          schema:
+            type: integer
+            example: 2
+      responses:
+        "200":
+          description: Métricas obtenidas exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estadisticasTareas:
+                    type: object
+                    description: "Objeto TareasEquipoDTO con las métricas de tareas."
+                  estadisticasHistorias:
+                    type: object
+                    description: "Objeto HistoriasEquipoDTO con las métricas de historias."
+                  detallesTaiga:
+                    type: array
+                    description: "Lista de objetos HistoriaDetalleDTO."
+                    items:
+                      type: object
+        "400":
+          description: Bad Request / Error al cargar estadísticas
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Error al cargar las estadísticas: [mensaje]"
+        "403":
+          description: Usuario no autenticado / Falta rol de profesor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Usuario no autenticado"
+
+  /api/taiga/equipo/{equipoId}/sincronizar:
+    post:
+      tags:
+        - Taiga
+      summary: Sincronizar Taiga local
+      description: >
+        Sincroniza manualmente las historias de usuario y tareas de Taiga con la base de datos local del sistema.
+      parameters:
+        - name: equipoId
+          in: path
+          required: true
+          description: ID del equipo a sincronizar.
+          schema:
+            type: integer
+            example: 5
+        - name: proyecto
+          in: query
+          required: true
+          description: Identificador del proyecto de Taiga.
+          schema:
+            type: string
+            example: "mi-proyecto-taiga"
+        - name: syncAll
+          in: query
+          required: false
+          description: Indica si se debe forzar una sincronización completa.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Sincronización exitosa
+        "400":
+          description: Fallo en la sincronización
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Fallo en la sincronización: [mensaje de error]"
+        "403":
+          description: Usuario no autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Usuario no autenticado"
+  /api/historial/equipo/{equipoId}/historico:
+    get:
+      tags:
+        - Historial
+      summary: Obtener histórico del equipo
+      description: >
+        Devuelve una lista con los datos históricos agrupados para el dashboard de un equipo específico. 
+        Solo accesible para usuarios con el rol de PROFESOR.
+      parameters:
+        - name: equipoId
+          in: path
+          required: true
+          description: ID del equipo del cual obtener el historial.
+          schema:
+            type: integer
+            example: 5
+      responses:
+        "200":
+          description: Datos históricos obtenidos exitosamente
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Lista de objetos HistoricoFrontendDTO con la información histórica.
+                items:
+                  type: object
+                  additionalProperties: true
+        "401":
+          description: Usuario no autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "No autorizado"
+        "403":
+          description: Acceso denegado / Faltan permisos de profesor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Acceso denegado"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+  /api/home/resumen-inicio:
+    get:
+      tags:
+        - Home
+      summary: Obtener resumen de inicio
+      description: >
+        Obtiene los datos del dashboard principal (resumen del curso o inicio) adaptados al rol del usuario autenticado. 
+        Requiere que el usuario esté autenticado en el sistema.
+      responses:
+        "200":
+          description: Resumen del dashboard obtenido exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Objeto DashboardHomeDTO con los datos de inicio.
+                additionalProperties: true
+        "403":
+          description: Usuario no autenticado
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Usuario no autenticado."
+        "404":
+          description: Usuario no encontrado en la base de datos
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Usuario no encontrado"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+  /api/comparativa/comparativa-equips/{cursoId}:
+    get:
+      tags:
+        - Comparativa
+      summary: Obtener comparativa de equipos
+      description: >
+        Obtiene las métricas detalladas y comparativas de todos los equipos pertenecientes a un curso específico. 
+        Solo accesible para usuarios con el rol de profesor.
+      parameters:
+        - name: cursoId
+          in: path
+          required: true
+          description: ID del curso del cual se desea obtener la comparativa de equipos.
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: Datos comparativos obtenidos exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Objeto ComparativaDetalleDTO con las métricas comparativas.
+                additionalProperties: true
+        "400":
+          description: Error en la obtención de datos
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Fallo en la obtencion de datos: [mensaje de error]"
+        "403":
+          description: Usuario no autenticado / Falta rol de profesor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Usuario no autenticado"
